@@ -12,19 +12,25 @@ import numpy as np
 # Import loading functions
 from loading_data import load_data_from_folder
 # Import data processing
-from td_utils import remove_all_fields_but, combine_fields, convert_fields_to_numeric_array
+from td_utils import remove_all_fields_but, combine_fields, convert_fields_to_numeric_array, load_and_organise_data
 
 #%% Load data
 DATA_PATH = ['/Volumes/MK_EPIOS/HUMANS/from ED']
 DATA_FILE = [[3,4,5]]
-# TARGET_NAME = ['MANUAL_EV_RFO_time','MANUAL_EV_LFS_time','MANUAL_EV_LFO_time']
+FORMAT = '.mat'
+TARGET_NAME = ['MANUAL_EV_RFO_time','MANUAL_EV_LFS_time','MANUAL_EV_LFO_time']
 TARGET_NAME = 'MANUAL_EV_RFS_time'
+
+LOAD_OPT = {'remove_all_fields_but': {'field': 'LFP'}, 'trigger_file': {'path': DATA_PATH, 'files': DATA_FILE, 'field': TARGET_NAME, 'file_format': '.mat', 'pre_ext': '_B33_MANUAL_gaitEvents'} }
+
+td = load_and_organise_data(DATA_PATH, DATA_FILE, FORMAT, LOAD_OPT)
 
 # Load
 td_predic = load_data_from_folder(folder = DATA_PATH,file_num = DATA_FILE,file_format = '.mat')
 # Remove fields from td
 remove_all_fields_but(td_predic,['LFP'], exact_field = False, inplace = True)
 # Load gait events
+td_target = load_data_from_folder(folder = DATA_PATH,file_num = DATA_FILE,file_format = '.mat', pre_ext = '_B33_MANUAL_gaitEvents', fields = TARGET_NAME)
 td_target = load_data_from_folder(folder = DATA_PATH,file_num = DATA_FILE,file_format = '.mat', pre_ext = '_B33_MANUAL_gaitEvents')
 # Remove fields from td
 remove_all_fields_but(td_target, TARGET_NAME, exact_field = False, inplace = True)

@@ -15,7 +15,9 @@ import h5py
 import os, glob
 # Import BlackRock library
 from brpylib import NsxFile, NevFile
-# Import Ripple library
+
+# Import td utils
+from td_utils import remove_all_fields_but
 
 # Library to open mat files
 import scipy.io
@@ -28,63 +30,79 @@ class folmat_type(Enum):
     ns6 = '.ns6'
     mat = '.mat'
 
-def load_data_from_folder(**kwargs):
-    """
-    This function is used to load data depending on the file format
-    Input:
-        folder: list of paths
-        file_num: list of trials number for each path
-        file_format: string with format of the file
-        pre_ext: string with name that distinguish the file (between file_num and file_format)
-        print_info: bool for deciding to print or not
-    
-    Example:
+def load_data_from_folder(folder, file_num, file_format, **kwargs):
+    '''
+    This function loads the data in the specified folder.
+
+    Parameters
+    ----------
+    folder : str / list of str
+        Path(s) where to find the data.
+    file_num : list of int / list of list of int
+        Number(s) of the dataset to load.
+    file_format : str
+        Format of the data to collect.
+    fields_to_load : str / list of str, optional
+        Name of the particular fields to load, trushing the others.
+    pre_ext : str, optional
+        Name that distinguish the file (between file_num and file_format)
+    verbose : bool, optional
+        Print what is happening on the function.
+
+    Returns
+    -------
+    td : dict / list of dict
+        Trial(s) data.
+
+    Example
+    -------
         folder = ['/Volumes/STN_CHINA/HH10/HH10_20190228', '/Volumes/STN_CHINA/HH10/HH10_20190228']
         file_num = [[],[1,2]]
         file_format = '.ns6'
-        td = load_data_from_folder(**{'folder':folder,'file_num':file_num,'file_format':file_format,'pre_ext':pre_ext})
-        td = load_data_from_folder(folder = folder,file_num = file_num,file_format = file_format, pre_ext = pre_ext)
-    """
+        td = load_data_from_folder(folder = folder,file_num = file_num,file_format = file_format, pre_ext = 'trial')
+
+    '''
     # Input variables
-    folder = []
-    file_num = []
-    file_format = ''
     pre_ext = ''
-    print_info = False
+    verbose = False
     
     # Function variables
     file_name = []
     folder_name = []
     td = []
+    fields_to_load = None
     
     # Check input variables
     for key,value in kwargs.items():
-        if key == 'folder':
-            folder = value
-        elif key == 'file_num':
-            file_num = value
-        elif key == 'file_format':
-            file_format = value
-        elif key == 'print':
-            print_info = value
+        if key == 'fields':
+            fields_to_load = value
+        elif key == 'verbose':
+            verbose = value
         elif key == 'pre_ext':
             pre_ext = value
 
-    # Check that file_num is a list of lists
+    # Check input data
+    if type(folder) is str:
+        folder = [folder]
+    
     if type(file_num) is list:
         if type(file_num[0]) is not(list):
             file_num = [file_num]
     else:
         raise Exception('file_num must be a list.')
     
-    # Get sure that all variables have been assigned
-    if len(folder) == 0:
-        raise Exception('No folder assigned when loading data. \n Use the "folder" variable')
-    elif file_format == '':
-        raise Exception('No format assigned when loading data. \n Use the "format" variable')
-    elif len(file_num) != len(folder):
+    if len(file_num) != len(folder):
         raise Exception('Folder and File_num variables should have the same length!')
     
+    # Check fields_to_load
+    if fields_to_load != None:
+        if type(fields_to_load) is str:
+            fields_to_load = [fields_to_load]
+            print('fields_to_load must be a list of string. You inputed a string. Converting to list...')
+            
+        if type(fields_to_load) is not list:
+            raise Exception('ERROR: fields_to_load must be a list of strings!')
+        
     # Check that format type is among the possible ones
     format_exist = False
     for fm_type in folmat_type:
@@ -122,7 +140,7 @@ def load_data_from_folder(**kwargs):
         raise Exception('Folder and File variables have different length!')
     
     # Print back information
-    if print_info:
+    if verbose:
         print('Files to load...')
         for fld, fil in zip(folder_name, file_name):
             print(os.path.join(fld,fil))
@@ -135,6 +153,9 @@ def load_data_from_folder(**kwargs):
         td_dict_tmp = load_data_from_file(fld,fil,file_format)
         td_dict_tmp = insert(td_dict_tmp,{'Folder':fld ,'File':fil},0)
         td.append(td_dict_tmp)
+    
+    if fields_to_load != None:
+        remove_all_fields_but(td,fields_to_load,False,True)
     
     print('DATA LOADED!')
     return td
@@ -247,73 +268,40 @@ def from_matstruct_to_pydict(_td, **kwargs):
     """
     Get a matlab struct and convert it to a tidy dict
     _td: dict
-    field: list of fields
+    fields: list of fields
     """
     td_out = {}
-    fields_name = []
+    # fields_name = []
     
-    # Check input variables
-    for key,value in kwargs.items():
-        if key == 'field':
-            fields_name = value
+    # # Check input variables
+    # for key,value in kwargs.items():
+    #     if key == 'fields':
+    #         fields_name = value
     
-    # Check correct input variables
-    if type(fields_name) is not list:
-        raise Exception('Field variable must be a list type!')
+    # if fields_name == None:
+    #     fields_name = []
+    
+    # if type(fields_name) is str:
+    #     fields_name = [fields_name]
+    #     print('fields_name must be a list of string. You inputed a string. Converting to list...')
+    
+    # # Check correct input variables
+    # if type(fields_name) is not list:
+    #     raise Exception('Field variable must be a list type!')
     
     # Stop field loop flag
     is_not_all_list = True
     
     # Populate td_out dict
-    if len(fields_name) == 0:                              
-        # Loop over fields.                    
-        while is_not_all_list:
-            # Loop internal check over single field
-            is_list = True
-            # Extract only the requested fields
-            for key, val in _td.items():
-                if '__' not in key:
-                    # print(key, val); print(' ')
-                    #  Check type of variable
-                    if type(val) == str and key not in td_out.keys():
-                        td_out[key] = val
-                    elif type(val) == int and key not in td_out.keys():
-                        td_out[key] = val
-                    elif type(val) == float and key not in td_out.keys():
-                        td_out[key] = val
-                    elif type(val) == list and key not in td_out.keys():
-                        td_out[key] = val
-                    elif type(val) == np.ndarray:
-                        val_red = reduce_mat_object(val)
-                        
-                        if is_mat_struc(val_red):
-                            for key_struct, val_struct in zip(val_red.dtype.names, val_red.item()):
-                                val_struct_red = reduce_mat_object(val_struct)
-                                if is_mat_struc(val_struct_red):
-                                    # print(key_struct)
-                                    is_list = False
-                                    td_out[key + '_' + key_struct] = val_struct_red
-                                else:
-                                    td_out[key + '_' + key_struct] = reduce_list(np.ndarray.tolist(invert_to_column(val_struct_red)))
-                        else:
-                            td_out[key] = reduce_list(np.ndarray.tolist(invert_to_column(val_red)))
-            if is_list:
-                is_not_all_list = False
-            else:
-                fields_name = td_out.keys()
-                _td = td_out.copy()
-                td_out = {}
-    else:
-        while is_not_all_list:
-            # Loop internal check over single field
-            is_list = True
-            # Extract only the requested fields
-            for key in fields_name:
-                # Check that variable exists
-                try:
-                    val = _td[key]
-                except:
-                    raise Exception('Field {} does not exist!'.format(key))
+    # if len(fields_name) == 0:                              
+    # Loop over fields.                    
+    while is_not_all_list:
+        # Loop internal check over single field
+        is_list = True
+        # Extract only the requested fields
+        for key, val in _td.items():
+            if '__' not in key:
+                # print(key, val); print(' ')
                 #  Check type of variable
                 if type(val) == str and key not in td_out.keys():
                     td_out[key] = val
@@ -335,15 +323,55 @@ def from_matstruct_to_pydict(_td, **kwargs):
                                 td_out[key + '_' + key_struct] = val_struct_red
                             else:
                                 td_out[key + '_' + key_struct] = reduce_list(np.ndarray.tolist(invert_to_column(val_struct_red)))
-                                
                     else:
                         td_out[key] = reduce_list(np.ndarray.tolist(invert_to_column(val_red)))
-            if is_list:
-                is_not_all_list = False
-            else:
-                fields_name = td_out.keys()
-                _td = td_out.copy()
-                td_out = {}
+        if is_list:
+            is_not_all_list = False
+        else:
+            # fields_name = td_out.keys()
+            _td = td_out.copy()
+            td_out = {}
+    # else:
+    #     while is_not_all_list:
+    #         # Loop internal check over single field
+    #         is_list = True
+    #         # Extract only the requested fields
+    #         for key in fields_name:
+    #             # Check that variable exists
+    #             try:
+    #                 val = _td[key]
+    #             except:
+    #                 raise Exception('Field {} does not exist!'.format(key))
+    #             #  Check type of variable
+    #             if type(val) == str and key not in td_out.keys():
+    #                 td_out[key] = val
+    #             elif type(val) == int and key not in td_out.keys():
+    #                 td_out[key] = val
+    #             elif type(val) == float and key not in td_out.keys():
+    #                 td_out[key] = val
+    #             elif type(val) == list and key not in td_out.keys():
+    #                 td_out[key] = val
+    #             elif type(val) == np.ndarray:
+    #                 val_red = reduce_mat_object(val)
+                    
+    #                 if is_mat_struc(val_red):
+    #                     for key_struct, val_struct in zip(val_red.dtype.names, val_red.item()):
+    #                         val_struct_red = reduce_mat_object(val_struct)
+    #                         if is_mat_struc(val_struct_red):
+    #                             # print(key_struct)
+    #                             is_list = False
+    #                             td_out[key + '_' + key_struct] = val_struct_red
+    #                         else:
+    #                             td_out[key + '_' + key_struct] = reduce_list(np.ndarray.tolist(invert_to_column(val_struct_red)))
+                                
+    #                 else:
+    #                     td_out[key] = reduce_list(np.ndarray.tolist(invert_to_column(val_red)))
+    #         if is_list:
+    #             is_not_all_list = False
+    #         else:
+    #             fields_name = td_out.keys()
+    #             _td = td_out.copy()
+    #             td_out = {}
 
     return td_out
     # End of from_matstruct_to_pydict

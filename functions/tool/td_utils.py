@@ -24,7 +24,36 @@ class event_linestyle(Enum):
     R = '-'
     L = '--'
 
-def process(td, **kwargs):
+
+def load_and_organise_data(data_path, data_files, **kwargs):
+    '''
+    This funtion loads and organises data from 
+
+    Parameters
+    ----------
+    data_path : str / list of str
+        Path(s) of the folder(s) with the data.
+    data_files : int / list of int
+        Number of the files to load.
+    **kwargs : dict
+        Additional information for organising the data
+
+    Returns
+    -------
+    td : dict
+        Trial data organised based on input requests.
+
+    '''
+    
+    pass
+    
+    
+    
+    # return td
+    
+
+
+def preprocess(td, **kwargs):
     pass
     # # Input variables
     # signals_to_use = None
@@ -52,6 +81,7 @@ def process(td, **kwargs):
     
     
     # return td
+
 
 def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_selected_fields = True, inplace = False):
     '''
@@ -280,12 +310,17 @@ def remove_all_fields_but(_td, _field, exact_field = False, inplace = False):
         td_copy = td_tmp.copy()
         for field in td_copy.keys():
             for field_name in _field:
+                del_field = True
                 if exact_field:
-                    if field_name != field:
-                        del td_tmp[field]
+                    if field_name == field:
+                        del_field = False
+                        break
                 else:
-                    if field_name not in field:
-                        del td_tmp[field]    
+                    if field_name in field:
+                        del_field = False
+                        break
+            if del_field == True:
+                del td_tmp[field]
     
     if input_dict:
         td = td[0]
