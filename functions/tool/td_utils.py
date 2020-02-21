@@ -14,6 +14,8 @@ from enum import Enum
 import numpy as np
 # Processing
 from processing import artefacts_removal
+# Import loading functions
+from loading_data import load_data_from_folder
 
 # Plotting events characteristics
 class event_color(Enum):
@@ -25,7 +27,7 @@ class event_linestyle(Enum):
     L = '--'
 
 
-def load_and_organise_data(data_path, data_files, **kwargs):
+def load_pipeline(data_path, data_files, data_format, **kwargs):
     '''
     This funtion loads and organises data from 
 
@@ -45,11 +47,57 @@ def load_and_organise_data(data_path, data_files, **kwargs):
 
     '''
     
-    pass
+    # Input variables
+    target_load_dict = None
+    remove_fields_dict = None
+    remove_all_fields_but_dict = None
+    convert_fields_to_numeric_array_dict = None
     
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'trigger_file':
+            target_load_dict = value
+        elif key == 'remove_fields':
+            remove_fields_dict = value
+        elif key == 'remove_all_fields_but':
+            remove_all_fields_but_dict = value
+        elif key == 'convert_fields_to_numeric_array':
+            convert_fields_to_numeric_array_dict = value
     
+    # Load data
+    td = load_data_from_folder(folder = data_path,file_num = data_files,file_format = data_format)
+
+    if remove_fields_dict != None:
+        remove_fields(td, remove_fields_dict['fields'], inplace = True)
     
-    # return td
+    if remove_all_fields_but_dict != None:
+        remove_all_fields_but(td, remove_all_fields_but_dict['fields'], exact_field = False, inplace = True)
+    
+    if target_load_dict != None:
+        options = remove_fields(target_load_dict, ['path', 'files', 'file_format'], inplace = False)
+        td_target = load_data_from_folder(folder = target_load_dict['path'],
+                                          file_num = target_load_dict['files'],
+                                          file_format = target_load_dict['file_format'],
+                                          **options)
+        # Combine target data with the predictor data
+        combine_fields(td, td_target, inplace = True)
+    
+    if convert_fields_to_numeric_array_dict != None:
+        convert_fields_to_numeric_array(td, _fields = convert_fields_to_numeric_array_dict['fields'], 
+                                        _vector_target_field = convert_fields_to_numeric_array_dict['target_vector'],
+                                        remove_selected_fields = True, inplace = True)
+    
+    # # Remove fields from td
+    # remove_all_fields_but(td_predic,['LFP'], exact_field = False, inplace = True)
+    # # Load gait events
+    # td_target = load_data_from_folder(folder = DATA_PATH,file_num = DATA_FILE,file_format = '.mat', pre_ext = '_B33_MANUAL_gaitEvents', fields = TARGET_NAME)
+    # # Combine fields
+    # combine_fields(td_predic, td_target, inplace = True)
+    # # Convert fields to numeric array
+    # convert_fields_to_numeric_array(td_predic, _fields = TARGET_NAME,
+    #                                 _vector_target_field = 'LFP_time', remove_selected_fields = True, inplace = True)    
+    
+    return td
     
 
 
