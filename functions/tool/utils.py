@@ -26,7 +26,6 @@ def flatten_list(_list, _tranform_to_array = False):
 
     '''
     
-    
     list_flat = _list
     list_not_flat_flag = True
     
@@ -87,6 +86,42 @@ def bipolar(array1, array2):
     
     return array
 
+def add(array1, array2):
+    '''
+    This function computes the sum of 2 arrays
+
+    Parameters
+    ----------
+    array1 : list / np.array
+        Array of monopolar recording.
+    array2 : list / np.array
+        Array of monopolar recording.
+
+    Returns
+    -------
+    array : list / np.array
+        Array of bipolar recording.
+
+    '''
+    
+    input_list = False
+    if type(array1) is list:
+        array1 = np.array(array1)
+        input_list = True
+        
+    if type(array2) is list:
+        array2 = np.array(array2)
+        
+    if type(array1) is not np.ndarray or type(array2) is not np.ndarray:
+        raise Exception('ERROR: array in input are not list or np.ndarray!')
+    
+    array = array1 + array2
+    
+    if input_list:
+        array = array.tolist()
+    
+    return array
+
 def find_first(point, vector):
     '''
     This function finds the index of the first element in the vector greater than the points
@@ -132,6 +167,12 @@ if __name__ == '__main__':
         raise Exception('ERROR: Test bipolar NOT passed!')
     else:
         print('Test bipolar passed!')
+    
+    # Test the add function
+    if (add(vector1, vector2) - (np.arange(10)+np.arange(10)) > 0.1).any():
+        raise Exception('ERROR: Test add NOT passed!')
+    else:
+        print('Test add passed!')
     
     # Test the flatten_list function
     if (flatten_list([[[1, 2], [3]], [4, 5], [6, 7]], True) - np.array([1,2,3,4,5,6,7]) > 0.1).any() or \
