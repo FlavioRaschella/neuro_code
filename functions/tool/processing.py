@@ -9,7 +9,7 @@ Created on Tue Feb 18 15:07:29 2020
 import numpy as np
 import matplotlib.pyplot as plt
 
-def artefacts_removal(data, Fs, n = 1, threshold = 300):
+def artefacts_removal(data, Fs, method = 'amplitude', n = 1, threshold = None):
     '''
     Parameters
     ----------
@@ -17,6 +17,8 @@ def artefacts_removal(data, Fs, n = 1, threshold = 300):
         Signal array from which remove the artefacts
     Fs : int
         Data sampling frequency
+    method: str
+        Method to find the artefacts
     n : int, optional
         Minimum number of signal with artefact. The default is 1.
     threshold : int, optional
@@ -47,11 +49,17 @@ def artefacts_removal(data, Fs, n = 1, threshold = 300):
     # Set junk offset
     junk_offset = np.ceil(Fs/2).astype('int')
     
-    # Set an array for bad indexes
-    idx = np.logical_or(data < -threshold, data > threshold).astype('int')
+    if threshold == None:
+        threshold = np.percentile(data,95, axis = 0).mean()
+        print('Threshold not specified. Setting threshold = 95 percentile of the data...')
     
-    # Bad indexes
-    bad_idx = (np.sum(idx, axis=1) >= n).astype('int')
+    if method == 'amplitude':
+        # Set an array for bad indexes
+        idx = np.logical_or(data < -threshold, data > threshold).astype('int')
+        # Bad indexes
+        bad_idx = (np.sum(idx, axis=1) >= n).astype('int')
+    else:
+        raise Exception('No other method for finding artefacts implemented!')
     
     # Remove junk period
     junk_init = np.where((bad_idx[:-1]==0) & (bad_idx[1:]==1))[0]+1
@@ -192,9 +200,11 @@ if __name__ == '__main__':
     data[12:21,1] = 10
     data[18:25,3] = 10
     good_test = np.ones(100).astype('int'); good_test[18:21] = 0;
-    good_idx = artefacts_removal(data, n = 2, threshold = 9)
+    good_idx = artefacts_removal(data, Fs = 0, method = 'amplitude', n = 2, threshold = 9)
     if (good_test!=good_idx).any():
         raise Exception('ERROR: Test artefacts_removal NOT passed.')
+    else:
+        print('Test artefacts_removal passed!')
 
     vector = np.arange(11)
     points = np.array([3.1, 6.9, 9.1])

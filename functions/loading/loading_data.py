@@ -16,9 +16,6 @@ import os, glob
 # Import BlackRock library
 from brpylib import NsxFile, NevFile
 
-# Import td utils
-from td_utils import remove_all_fields_but
-
 # Library to open mat files
 import scipy.io
 # Enumerator library
@@ -42,8 +39,6 @@ def load_data_from_folder(folder, file_num, file_format, **kwargs):
         Number(s) of the dataset to load.
     file_format : str
         Format of the data to collect.
-    fields_to_load : str / list of str, optional
-        Name of the particular fields to load, trushing the others.
     pre_ext : str, optional
         Name that distinguish the file (between file_num and file_format)
     verbose : bool, optional
@@ -70,13 +65,10 @@ def load_data_from_folder(folder, file_num, file_format, **kwargs):
     file_name = []
     folder_name = []
     td = []
-    fields_to_load = None
     
     # Check input variables
     for key,value in kwargs.items():
-        if key == 'fields':
-            fields_to_load = value
-        elif key == 'verbose':
+        if key == 'verbose':
             verbose = value
         elif key == 'pre_ext':
             pre_ext = value
@@ -93,15 +85,6 @@ def load_data_from_folder(folder, file_num, file_format, **kwargs):
     
     if len(file_num) != len(folder):
         raise Exception('Folder and File_num variables should have the same length!')
-    
-    # Check fields_to_load
-    if fields_to_load != None:
-        if type(fields_to_load) is str:
-            fields_to_load = [fields_to_load]
-            print('fields_to_load must be a list of string. You inputed a string. Converting to list...')
-            
-        if type(fields_to_load) is not list:
-            raise Exception('ERROR: fields_to_load must be a list of strings!')
         
     # Check that format type is among the possible ones
     format_exist = False
@@ -153,9 +136,6 @@ def load_data_from_folder(folder, file_num, file_format, **kwargs):
         td_dict_tmp = load_data_from_file(fld,fil,file_format)
         td_dict_tmp = insert(td_dict_tmp,{'Folder':fld ,'File':fil},0)
         td.append(td_dict_tmp)
-    
-    if fields_to_load != None:
-        remove_all_fields_but(td,fields_to_load,False,True)
     
     print('DATA LOADED!')
     return td

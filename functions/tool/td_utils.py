@@ -16,7 +16,8 @@ import numpy as np
 from processing import artefacts_removal, convert_points_to_target_vector
 # Import loading functions
 from loading_data import load_data_from_folder
-from utils import bipolar, add, flatten_list
+
+from utils import bipolar, add, flatten_list, group_fields
 
 # Plotting events characteristics
 class event_color(Enum):
@@ -27,103 +28,76 @@ class event_linestyle(Enum):
     R = '-'
     L = '--'
 
-
-def load_pipeline(data_path, data_files, data_format, **kwargs):
+def identify_artefacts(_td, _fields, _Fs, **kwargs):
     '''
-    This funtion loads and organises data from 
+    This function identifies the artefacts in the trial data dict(s)
 
     Parameters
     ----------
-    data_path : str / list of str
-        Path(s) of the folder(s) with the data.
-    data_files : int / list of int
-        Number of the files to load.
-    **kwargs : dict
-        Additional information for organising the data
-
+    _td : dict / list of dict
+        Trial data.
+    _fields : list of str
+        Fields over which finding the artefacts
+    _Fs : int
+        Sample frequency of the signals
+    method : str, optional
+        Method for removing the artefacts. The default is amplitude.
+    signal_n : int
+        Number of signal on which to look for artefacts
+    
     Returns
     -------
-    td : dict
-        Trial data organised based on input requests.
+    td_artefacts : dict / list of dict
+        Dictionary of the identified artefacts.
 
     '''
     
-    # Input variables
-    target_load_dict = None
-    remove_fields_dict = None
-    remove_all_fields_but_dict = None
-    convert_fields_to_numeric_array_dict = None
+    method = None
+    signal_n = None
+    threshold = None
     
     # Check input variables
     for key,value in kwargs.items():
-        if key == 'trigger_file':
-            target_load_dict = value
-        elif key == 'remove_fields':
-            remove_fields_dict = value
-        elif key == 'remove_all_fields_but':
-            remove_all_fields_but_dict = value
-        elif key == 'convert_fields_to_numeric_array':
-            convert_fields_to_numeric_array_dict = value
-    
-    # Load data
-    td = load_data_from_folder(folder = data_path,file_num = data_files,file_format = data_format)
+        if key == 'method':
+            method = value
+        if key == 'signal_n':
+            signal_n = value
+        if key == 'threshold':
+            threshold = value
 
-    if remove_fields_dict != None:
-        remove_fields(td, remove_fields_dict['fields'], exact_field = False, inplace = True)
-    
-    if remove_all_fields_but_dict != None:
-        remove_all_fields_but(td, remove_all_fields_but_dict['fields'], exact_field = False, inplace = True)
-    
-    if target_load_dict != None:
-        options = remove_fields(target_load_dict, ['path', 'files', 'file_format'], exact_field = False, inplace = False)
-        td_target = load_data_from_folder(folder = target_load_dict['path'],
-                                          file_num = target_load_dict['files'],
-                                          file_format = target_load_dict['file_format'],
-                                          **options)
-        # Combine target data with the predictor data
-        combine_dicts(td, td_target, inplace = True)
-    
-    if convert_fields_to_numeric_array_dict != None:
-        convert_fields_to_numeric_array(td, _fields = convert_fields_to_numeric_array_dict['fields'], 
-                                        _vector_target_field = convert_fields_to_numeric_array_dict['target_vector'],
-                                        remove_selected_fields = True, inplace = True)    
-    return td
-    
+    # Get a temporary copy of td
+    td = _td.copy()
 
-def cleaning_pipeline(td, **kwargs):
-    pass
-
-
-def preprocess_pipeline(td, **kwargs):
-    pass
-    # # Input variables
-    # signals_to_use = None
-    # filters_to_use = None
-    
-    # # Check input variables
-    # for key,value in kwargs.items():
-    #     if key == 'signals':
-    #         signals_to_use = value
-    #     elif key == 'filters':
-    #         filters_to_use = value
-    
-    # # Get selected signals
-    # td = get_field(td,signals_to_use)
-    
-    # for td_tmp in td:
+    # check dict input variable
+    if type(td) is dict:
+        td = [td]
         
-    #     # Artefacts removal
-    #     artefacts_removal(data, threshold = 300)
+    if type(td) is not list:
+        raise Exception('ERROR: _td must be a list of dictionaries!')
     
-    #     # Remove unwanted parts
+    # check string input variable
+    if type(_fields) is str:
+        _fields = [_fields]
+        
+    if type(_fields) is not list:
+        raise Exception('ERROR: _str must be a list of strings!')
+        
+    if method == None:
+        method = 'amplitude'
+        print('Method for removing artifacts not specified: Selectd method is {}'.format(method))
+        
+    if signal_n == None:
+        print('Number of signals with artefacts not specified. Setting to len(_fields)-1 ...')
+        signal_n = len(_fields)-1
+        
+    td_artefacts = []
+    for td_tmp in td:
+        data = group_fields(td_tmp,_fields)
+        td_artefacts.append({'good_idx':artefacts_removal(data, _Fs, method, signal_n, threshold)})
     
-    
-    #     # Data processing
-    
-    
-    # return td
+    return td_artefacts
 
-def combine_fields(_td, _fields, method = 'subtract', remove_selected_fields = True, inplace = False):
+def combine_fields(_td, _fields, **kwargs):
     '''
     This function combines the fields in one dictionary
 
@@ -146,6 +120,19 @@ def combine_fields(_td, _fields, method = 'subtract', remove_selected_fields = T
         Trial data.
 
     '''
+
+    method = 'subtract'
+    remove_selected_fields = True
+    inplace = False
+
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'method':
+            method = value
+        elif key == 'remove_selected_fields':
+            remove_selected_fields = value
+        elif key == 'inplace':
+            inplace = value
 
     if inplace:
         td = _td
@@ -321,7 +308,7 @@ def combine_dicts(_td1, _td2, inplace = False):
         return td1
 
 
-def remove_fields(_td, _str, exact_field = False, inplace = False):
+def remove_fields(_td, _field, exact_field = False, inplace = False):
     '''
     This function removes fields from a dict.
 
@@ -358,15 +345,15 @@ def remove_fields(_td, _str, exact_field = False, inplace = False):
         raise Exception('ERROR: _td must be a list of dictionaries!')
     
     # check string input variable
-    if type(_str) is str:
-        _str = [_str]
+    if type(_field) is str:
+        _field = [_field]
         
-    if type(_str) is not list:
-        raise Exception('ERROR: _str must be a list of strings!')
+    if type(_field) is not list:
+        raise Exception('ERROR: _field must be a list of strings!')
     
     for td_tmp in td:
         td_copy = td_tmp.copy()
-        for iStr in _str:
+        for iStr in _field:
             any_del = False
             for iFld in td_copy.keys():
                 if exact_field:
@@ -396,7 +383,7 @@ def remove_all_fields_but(_td, _field, exact_field = False, inplace = False):
     _td : dict / list of dict
         dict of the trial data.
     _field : str / list of str
-        Filed to keep.
+        Field to keep.
     exact_field : bool, optional
         Look for the exact field name in the dict. The default is False.
     inplace : bool, optional
@@ -743,7 +730,166 @@ def td_plot(_td, _signals, **kwargs):
                     
                 for ev in _td[event]:
                     ax.axvline(ev,ylim[0], ylim[1], color = col, linestyle = line_style)
+
+
+def load_pipeline(data_path, data_files, data_format, **kwargs):
+    '''
+    This funtion loads and organises data from 
+
+    Parameters
+    ----------
+    data_path : str / list of str
+        Path(s) of the folder(s) with the data.
+    data_files : int / list of int
+        Number of the files to load.
+    **kwargs : dict
+        Additional information for organising the data
+
+    Returns
+    -------
+    td : dict
+        Trial data organised based on input requests.
+
+    '''
+    
+    # Input variables
+    target_load_dict = None
+    remove_fields_dict = None
+    remove_all_fields_but_dict = None
+    convert_fields_to_numeric_array_dict = None
+    
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'trigger_file':
+            target_load_dict = value
+        elif key == 'remove_fields':
+            remove_fields_dict = value
+        elif key == 'remove_all_fields_but':
+            remove_all_fields_but_dict = value
+        elif key == 'convert_fields_to_numeric_array':
+            convert_fields_to_numeric_array_dict = value
+    
+    # Load data
+    td = load_data_from_folder(folder = data_path,file_num = data_files,file_format = data_format)
+
+    if remove_fields_dict != None:
+        remove_fields(td, remove_fields_dict['fields'], exact_field = False, inplace = True)
+    
+    if remove_all_fields_but_dict != None:
+        remove_all_fields_but(td, remove_all_fields_but_dict['fields'], exact_field = True, inplace = True)
+    
+    if target_load_dict != None:
+        options = remove_fields(target_load_dict, ['path', 'files', 'file_format'], exact_field = False, inplace = False)
+        td_target = load_data_from_folder(folder = target_load_dict['path'],
+                                          file_num = target_load_dict['files'],
+                                          file_format = target_load_dict['file_format'],
+                                          **options)
+        if 'fields' in options.keys():
+            remove_all_fields_but(td_target,options['fields'],False,True)
+    
+        # Combine target data with the predictor data
+        combine_dicts(td, td_target, inplace = True)
+    
+    if convert_fields_to_numeric_array_dict != None:
+        convert_fields_to_numeric_array(td, _fields = convert_fields_to_numeric_array_dict['fields'], 
+                                        _vector_target_field = convert_fields_to_numeric_array_dict['target_vector'],
+                                        remove_selected_fields = True, inplace = True)    
+    return td
+    
+
+def cleaning_pipeline(td, **kwargs):
+    '''
+    This function cleans the dataset by:
+        combining signals
+        removing artefacts
+        segmenting the data
+
+    Parameters
+    ----------
+    td : dict / list of dict
+        Trial data.
+    **kwargs : dict
+        Additional information for organising the data
+
+    Returns
+    -------
+    td : dict / list of dict
+        Trial data organised based on input requests.
+
+    '''
+    
+    # Input variables
+    combine_fields_dict = None
+    remove_artefacts_dict = None
+    segment_data_dict = None
+    
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'combine_fields':
+            combine_fields_dict = value
+        elif key == 'remove_artefacts':
+            remove_artefacts_dict = value
+        elif key == 'segment_data':
+            segment_data_dict = value
+    
+    # check dict input variable
+    input_dict = False
+    if type(td) is dict:
+        input_dict = True
+        td = [td]
         
+    if type(td) is not list:
+        raise Exception('ERROR: _td must be a list of dictionaries!')
+    
+    if combine_fields_dict != None:
+        options = remove_fields(combine_fields_dict, ['fields'], exact_field = False, inplace = False)
+        combine_fields(td, combine_fields_dict['fields'], **options)
+    
+    if remove_artefacts_dict != None:
+        options = remove_fields(remove_artefacts_dict, ['fields','Fs'], exact_field = False, inplace = False)
+        td_segment = identify_artefacts(td, remove_artefacts_dict['fields'], remove_artefacts_dict['Fs'], **options)
+    
+    if combine_fields_dict != None:
+        pass
+    
+    if input_dict:
+        td = td[0]
+        
+    return td
+
+
+def preprocess_pipeline(td, **kwargs):
+    pass
+    # # Input variables
+    # signals_to_use = None
+    # filters_to_use = None
+    
+    # # Check input variables
+    # for key,value in kwargs.items():
+    #     if key == 'signals':
+    #         signals_to_use = value
+    #     elif key == 'filters':
+    #         filters_to_use = value
+    
+    # # Get selected signals
+    # td = get_field(td,signals_to_use)
+    
+    # for td_tmp in td:
+        
+    #     # Artefacts removal
+    #     artefacts_removal(data, threshold = 300)
+    
+    #     # Remove unwanted parts
+    
+    
+    #     # Data processing
+    
+    
+    # return td
+
+
+
+
 if __name__ == '__main__':
     td_test = {'test1': np.arange(10), 'test2': [1,2,3,4,5,6]}
     td_test2 = {'test1': np.arange(20), 'test3': [1,2,3,4,5,6]}
@@ -794,7 +940,7 @@ if __name__ == '__main__':
     
     # Test combine_fields
     td_test_combine = {'test1': np.arange(10), 'test2': np.arange(10)}
-    td_new = combine_fields(td_test_combine,['test1','test2'],'subtract')
+    td_new = combine_fields(td_test_combine,['test1','test2'],method = 'subtract')
     if 'test1-test2' in td_new.keys() and (td_new['test1-test2'] - np.zeros(10) < 0.1).all():
         print('Test combine_fields passed!')
     else:

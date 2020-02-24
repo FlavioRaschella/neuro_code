@@ -8,6 +8,39 @@ Created on Thu Feb 20 10:57:11 2020
 
 import numpy as np
 
+def group_fields(_dict, _fields):
+    '''
+    This function groups the data in the fields of a dict
+
+    Parameters
+    ----------
+    _dict : dict
+        Dictionary from which we take the signals.
+    _fields : list of str
+        List of the fields containing the signals.
+
+    Returns
+    -------
+    data : np.ndarray
+        Data containing the concatenated signals.
+
+    '''
+    
+    if type(_dict) is not dict:
+        raise Exception('ERROR: _dict input must be a dictionary!')
+    
+    if type(_fields) is not list:
+        raise Exception('ERROR: _fields input must be a list of str!')
+
+    # Check that signal in fields have the same length
+    fields_len = [len(_dict[field]) for field in _fields]
+    if (np.diff(fields_len) > 0.1).any():
+        raise Exception('ERROR: signals have different length!')
+    
+    data = np.array([_dict[field] for field in _fields])
+    
+    return data
+
 def flatten_list(_list, _tranform_to_array = False):
     '''
     This function flattens a list of lists to a simple list
@@ -180,6 +213,13 @@ if __name__ == '__main__':
         raise Exception('ERROR: Test flatten_list NOT passed!')
     else:
         print('Test flatten_list passed!')
+    
+    # Test the group_fields function
+    dict_test = {'test1': np.arange(10), 'test2': np.arange(10)}
+    if (group_fields(dict_test, ['test1','test2']) - np.array([np.arange(10),np.arange(10)]) > 0.1).any():
+        raise Exception('ERROR: Test group_fields NOT passed!')
+    else:
+        print('Test group_fields passed!')
     
     print('All implemented tests passed!')
     
