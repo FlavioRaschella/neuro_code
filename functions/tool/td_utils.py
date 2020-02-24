@@ -16,7 +16,7 @@ import numpy as np
 from processing import artefacts_removal, convert_points_to_target_vector
 # Import loading functions
 from loading_data import load_data_from_folder
-from utils import bipolar
+from utils import bipolar, add, flatten_list
 
 # Plotting events characteristics
 class event_color(Enum):
@@ -69,13 +69,13 @@ def load_pipeline(data_path, data_files, data_format, **kwargs):
     td = load_data_from_folder(folder = data_path,file_num = data_files,file_format = data_format)
 
     if remove_fields_dict != None:
-        remove_fields(td, remove_fields_dict['fields'], inplace = True)
+        remove_fields(td, remove_fields_dict['fields'], exact_field = False, inplace = True)
     
     if remove_all_fields_but_dict != None:
         remove_all_fields_but(td, remove_all_fields_but_dict['fields'], exact_field = False, inplace = True)
     
     if target_load_dict != None:
-        options = remove_fields(target_load_dict, ['path', 'files', 'file_format'], inplace = False)
+        options = remove_fields(target_load_dict, ['path', 'files', 'file_format'], exact_field = False, inplace = False)
         td_target = load_data_from_folder(folder = target_load_dict['path'],
                                           file_num = target_load_dict['files'],
                                           file_format = target_load_dict['file_format'],
@@ -163,30 +163,36 @@ def combine_fields(_td, _fields, method = 'subtract', remove_selected_fields = T
         
     # check _fields input variable        
     if type(_fields) is not list:
-        raise Exception('ERROR: _str must be a list of strings!')
+        raise Exception('ERROR: _fields must be a list!')
+    
+    if type(_fields[0]) is not list:
+        _fields = [_fields]
     
     for field in _fields:
         if len(field) != 2:
-            raise Exception('ERROR: _str must be a list of strings!')
+            raise Exception('ERROR: lists in _fields must cointain max 2 strings!')
     
     if method not in ['subtract','multuply','divide','add']:
         raise Exception('ERROR: specified method has not been implemented!')
     
     for td_tmp in td:
         for field in _fields:
+            if len(field[0]) != len(field[1]):
+                raise Exception('ERROR: the 2 arrays must have the same length!')
+            
             if method == 'subtract':
                 signal_name = '{}-{}'.format(field[0],field[1])
                 td_tmp[signal_name] = bipolar(td_tmp[field[0]],td_tmp[field[1]])
             elif method == 'add':
                 signal_name = '{}+{}'.format(field[0],field[1])
-                td_tmp[signal_name] = (np.array(td_tmp[field[0]]) + np.array(td_tmp[field[1]])).tolist()
+                td_tmp[signal_name] = add(td_tmp[field[0]],td_tmp[field[1]])
             elif method == 'multuply':
                 raise Exception('Method must be implemented!')
             elif method == 'divide':
                 raise Exception('Method must be implemented!')
           
     if remove_selected_fields:
-        remove_fields(td,_fields)
+        remove_fields(td,flatten_list(_fields), exact_field = True)
     
     if input_dict:
         td = td[0]
@@ -254,7 +260,7 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_s
         td_tmp['target'] = vector_target
            
     if remove_selected_fields:
-        remove_fields(td,_fields, inplace = True)
+        remove_fields(td,_fields, exact_field = False, inplace = True)
         
     if input_dict:
         td = td[0]
@@ -315,7 +321,7 @@ def combine_dicts(_td1, _td2, inplace = False):
         return td1
 
 
-def remove_fields(_td, _str, inplace = False):
+def remove_fields(_td, _str, exact_field = False, inplace = False):
     '''
     This function removes fields from a dict.
 
@@ -324,7 +330,9 @@ def remove_fields(_td, _str, inplace = False):
     _td : dict / list of dict
         dict of the trial data.
     _field : str / list of str
-        Fileds to remove.
+        Fields to remove.
+    exact_field : bool, optional
+        Look for the exact field name in the dict. The default is False.
     inplace : bool, optional
         Perfrom operaiton on the input data dict. The default is False.
 
@@ -361,9 +369,14 @@ def remove_fields(_td, _str, inplace = False):
         for iStr in _str:
             any_del = False
             for iFld in td_copy.keys():
-                if iStr in iFld:
-                    del td_tmp[iFld]
-                    any_del = True
+                if exact_field:
+                    if iStr == iFld:
+                        del td_tmp[iFld]
+                        any_del = True
+                else:
+                    if iStr in iFld:
+                        del td_tmp[iFld]
+                        any_del = True
             if not any_del:
                 print('Field {} not found. I could not be removed...'.format(iStr))
     
@@ -771,7 +784,7 @@ if __name__ == '__main__':
     else:
         print('Test find_first passed!')
     
-    # Test remove_all_fields_but
+    
     td_new1 = remove_all_fields_but(td_test, 'test1', exact_field = True, inplace = False)
     td_new2 = remove_all_fields_but(td_test, 'test', exact_field = False, inplace = False)
     if set(td_new1.keys()) != set(['test1']) or set(td_new2.keys()) != set(['test1','test2']):
@@ -779,7 +792,16 @@ if __name__ == '__main__':
     else:
         print('Test remove_all_fields_but passed!')
     
-    
+    # Test combine_fields
+    td_test_combine = {'test1': np.arange(10), 'test2': np.arange(10)}
+    td_new = combine_fields(td_test_combine,['test1','test2'],'subtract')
+    if 'test1-test2' in td_new.keys() and (td_new['test1-test2'] - np.zeros(10) < 0.1).all():
+        print('Test combine_fields passed!')
+    else:
+        raise Exception('ERROR: Test combine_fields NOT passed!')
+        
+        
+        
     print('All implemented tests passed!')
     
     
