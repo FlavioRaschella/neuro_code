@@ -13,9 +13,10 @@ from enum import Enum
 # Numpy library
 import numpy as np
 # Processing
-from processing import artefacts_removal
+from processing import artefacts_removal, convert_points_to_target_vector
 # Import loading functions
 from loading_data import load_data_from_folder
+from utils import bipolar
 
 # Plotting events characteristics
 class event_color(Enum):
@@ -80,28 +81,20 @@ def load_pipeline(data_path, data_files, data_format, **kwargs):
                                           file_format = target_load_dict['file_format'],
                                           **options)
         # Combine target data with the predictor data
-        combine_fields(td, td_target, inplace = True)
+        combine_dicts(td, td_target, inplace = True)
     
     if convert_fields_to_numeric_array_dict != None:
         convert_fields_to_numeric_array(td, _fields = convert_fields_to_numeric_array_dict['fields'], 
                                         _vector_target_field = convert_fields_to_numeric_array_dict['target_vector'],
-                                        remove_selected_fields = True, inplace = True)
-    
-    # # Remove fields from td
-    # remove_all_fields_but(td_predic,['LFP'], exact_field = False, inplace = True)
-    # # Load gait events
-    # td_target = load_data_from_folder(folder = DATA_PATH,file_num = DATA_FILE,file_format = '.mat', pre_ext = '_B33_MANUAL_gaitEvents', fields = TARGET_NAME)
-    # # Combine fields
-    # combine_fields(td_predic, td_target, inplace = True)
-    # # Convert fields to numeric array
-    # convert_fields_to_numeric_array(td_predic, _fields = TARGET_NAME,
-    #                                 _vector_target_field = 'LFP_time', remove_selected_fields = True, inplace = True)    
-    
+                                        remove_selected_fields = True, inplace = True)    
     return td
     
 
+def cleaning_pipeline(td, **kwargs):
+    pass
 
-def preprocess(td, **kwargs):
+
+def preprocess_pipeline(td, **kwargs):
     pass
     # # Input variables
     # signals_to_use = None
@@ -130,6 +123,77 @@ def preprocess(td, **kwargs):
     
     # return td
 
+def combine_fields(_td, _fields, method = 'subtract', remove_selected_fields = True, inplace = False):
+    '''
+    This function combines the fields in one dictionary
+
+    Parameters
+    ----------
+    _td : dict / list of dict
+        Trial data.
+    _fields : list of str
+        Two fields to combine.
+    method : str
+        Method for combining the arrays. The default is subtract.
+    remove_selected_fields : bool, optional
+        Remove the fields before returning the dataset. The default is True.
+    inplace : bool, optional
+        Perfrom operation on the input data dict. The default is False.
+
+    Returns
+    -------
+    td : dict / list of dict
+        Trial data.
+
+    '''
+
+    if inplace:
+        td = _td
+    else:
+        td = _td.copy()
+
+    # check dict input variable
+    input_dict = False
+    if type(td) is dict:
+        input_dict = True
+        td = [td]
+        
+    if type(td) is not list:
+        raise Exception('ERROR: _td must be a list of dictionaries!')
+        
+    # check _fields input variable        
+    if type(_fields) is not list:
+        raise Exception('ERROR: _str must be a list of strings!')
+    
+    for field in _fields:
+        if len(field) != 2:
+            raise Exception('ERROR: _str must be a list of strings!')
+    
+    if method not in ['subtract','multuply','divide','add']:
+        raise Exception('ERROR: specified method has not been implemented!')
+    
+    for td_tmp in td:
+        for field in _fields:
+            if method == 'subtract':
+                signal_name = '{}-{}'.format(field[0],field[1])
+                td_tmp[signal_name] = bipolar(td_tmp[field[0]],td_tmp[field[1]])
+            elif method == 'add':
+                signal_name = '{}+{}'.format(field[0],field[1])
+                td_tmp[signal_name] = (np.array(td_tmp[field[0]]) + np.array(td_tmp[field[1]])).tolist()
+            elif method == 'multuply':
+                raise Exception('Method must be implemented!')
+            elif method == 'divide':
+                raise Exception('Method must be implemented!')
+          
+    if remove_selected_fields:
+        remove_fields(td,_fields)
+    
+    if input_dict:
+        td = td[0]
+    
+    if not inplace:
+        return td
+
 
 def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_selected_fields = True, inplace = False):
     '''
@@ -154,7 +218,6 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_s
         Trial data.
 
     '''
-    from processing import convert_points_to_target_vector
     
     if inplace:
         td = _td
@@ -168,21 +231,21 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_s
         td = [td]
         
     if type(td) is not list:
-        raise Exception('_td must be a list of dictionaries!')
+        raise Exception('ERROR: _td must be a list of dictionaries!')
         
     # check string input variable
     if type(_fields) is str:
         _fields = [_fields]
         
     if type(_fields) is not list:
-        raise Exception('_str must be a list of strings!')
+        raise Exception('ERROR: _str must be a list of strings!')
     
     if type(_vector_target_field) is not str:
-        raise Exception('_vector_target_field must be a string!')
+        raise Exception('ERROR: _vector_target_field must be a string!')
     
     # Check that _signals are in the dictionary
     if not is_field(td,_fields):
-        raise Exception('Selected fields are not in the dict')
+        raise Exception('ERROR: Selected fields are not in the dict')
     
     for td_tmp in td:
         vector_compare = np.array(td_tmp[_vector_target_field])
@@ -200,7 +263,7 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_s
         return td
     
 
-def combine_fields(_td1, _td2, inplace = False):
+def combine_dicts(_td1, _td2, inplace = False):
     """        
     This function combine 2 dicts.
     In case of same fields, the first dict dominates
@@ -238,7 +301,7 @@ def combine_fields(_td1, _td2, inplace = False):
     
     # check that tds have the same dimension
     if len(td1) != len(td2):
-        raise Exception('The 2 tds have different dimension!')
+        raise Exception('ERROR: The 2 tds have different dimension!')
     
     for td1_el, td2_el in zip(td1, td2):
         for k,v in td2_el.items():
@@ -284,14 +347,14 @@ def remove_fields(_td, _str, inplace = False):
         td = [td]
         
     if type(td) is not list:
-        raise Exception('_td must be a list of dictionaries!')
+        raise Exception('ERROR: _td must be a list of dictionaries!')
     
     # check string input variable
     if type(_str) is str:
         _str = [_str]
         
     if type(_str) is not list:
-        raise Exception('_str must be a list of strings!')
+        raise Exception('ERROR: _str must be a list of strings!')
     
     for td_tmp in td:
         td_copy = td_tmp.copy()
@@ -345,14 +408,14 @@ def remove_all_fields_but(_td, _field, exact_field = False, inplace = False):
         td = [td]
         
     if type(td) is not list:
-        raise Exception('_td must be a list of dictionaries!')
+        raise Exception('ERROR: _td must be a list of dictionaries!')
     
     # check string input variable
     if type(_field) is str:
         _field = [_field]
         
     if type(_field) is not list:
-        raise Exception('_str must be a list of strings!')
+        raise Exception('ERROR: _str must be a list of strings!')
     
     for td_tmp in td:
         td_copy = td_tmp.copy()
@@ -411,11 +474,11 @@ def add_field(_td, _dict, inplace = False, verbose = False):
         td = [td]
         
     if type(td) is not list:
-        raise Exception('_td must be a list of dictionaries!')
+        raise Exception('ERROR: _td must be a list of dictionaries!')
     
     # check string input variable
     if type(_dict) is not dict:
-        raise Exception('_dict input must be a dictionary!')
+        raise Exception('ERROR: _dict input must be a dictionary!')
         
     for td_tmp in td:
         if set(_dict.keys()) in set(td_tmp.keys()):
@@ -459,14 +522,14 @@ def is_field(_td, _str, verbose = False):
         _td = [_td]
         
     if type(_td) is not list:
-        raise Exception('_td must be a list of dictionaries!')
+        raise Exception('ERROR: _td must be a list of dictionaries!')
     
     # check string input variable
     if type(_str) is str:
         _str = [_str]
         
     if type(_str) is not list:
-        raise Exception('_str must be a list of strings!')
+        raise Exception('ERROR: _str must be a list of strings!')
     
     for idx,iDic in enumerate(_td):
         for iStr in _str:
@@ -517,7 +580,7 @@ def get_field(_td, _signals, save_signals_name = False):
     
     # Check that _signals are in the dictionary
     if not is_field(td,_signals):
-        raise Exception('Selected signals are not in the dict')
+        raise Exception('ERROR: Selected signals are not in the dict')
     
     # Loop over the trials
     for td_tmp in td:
@@ -599,19 +662,19 @@ def td_plot(_td, _signals, **kwargs):
 
     # Check input variables
     if type(_td) is not dict:
-        raise Exception('Error: td type must be a dict! It is a {}'.format(type(_td)))
+        raise Exception('ERROR: td type must be a dict! It is a {}'.format(type(_td)))
         
     if type(_signals) is str:
         _signals = [_signals]
         
     # Check whether _signals elements are in _td
     if not(is_field(_td, _signals)):
-        raise Exception('Error: _signals must be in _td!')
+        raise Exception('ERROR: _signals must be in _td!')
 
     # Check whether gait_field elements are in _td
     if len(gait_events) != 0:
         if not(is_field(_td, gait_events)):
-            raise Exception('Error: {} must be in _td!'.format(gait_events))
+            raise Exception('ERROR: {} must be in _td!'.format(gait_events))
         
     # Check subplot dimension
     if not(subplot):
@@ -673,12 +736,12 @@ if __name__ == '__main__':
     td_test2 = {'test1': np.arange(20), 'test3': [1,2,3,4,5,6]}
     td_test_list = [td_test,td_test]
     
-    # Test combine_fields
-    td_comb = combine_fields(td_test, td_test2, inplace = False)
+    # Test combine_dicts
+    td_comb = combine_dicts(td_test, td_test2, inplace = False)
     if set(['test1','test2','test3']) == td_comb.keys() and (td_comb['test1'] == td_test['test1']).all():
-        print('Test combine_fields passed!')
+        print('Test combine_dicts passed!')
     else:
-        raise Exception('ERROR: Test combine_fields NOT passed!')
+        raise Exception('ERROR: Test combine_dicts NOT passed!')
     
     # Test is_field
     if is_field(td_test,'test1') and is_field(td_test,'test3',False) == False and is_field(td_test_list,'test1') and is_field(td_test_list,'test3',False) == False:

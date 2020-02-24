@@ -8,7 +8,7 @@ Created on Tue Feb 18 14:16:01 2020
 
 #%% Libraries
 # Import data loading, processing
-from td_utils import load_pipeline
+from td_utils import load_pipeline, cleaning_pipeline, preprocess_pipeline
 
 #%% Load data
 DATA_PATH = ['/Volumes/MK_EPIOS/HUMANS/from ED']
@@ -22,16 +22,23 @@ LOAD_OPT = {'convert_fields_to_numeric_array': {'fields': TARGET_NAME,'target_ve
             'trigger_file': {'path': DATA_PATH, 'files': DATA_FILE, 'file_format': '.mat', 'fields': TARGET_NAME, 'pre_ext': '_B33_MANUAL_gaitEvents'} }
 td = load_pipeline(DATA_PATH, DATA_FILE, FORMAT, **LOAD_OPT)
 
-#%% Divide data in blocks
+#%% CLEANING DATA
 CHANNELS = [['LFP_BIP10','LFP_BIP11'],['LFP_BIP11','LFP_BIP12']]
-# PROCESS_OPT = {'convert_fields_to_numeric_array': {'fields': TARGET_NAME,'target_vector': 'LFP_time'},
-#             'remove_all_fields_but': {'fields': 'LFP'},
-#             'trigger_file': {'path': DATA_PATH, 'files': DATA_FILE, 'file_format': '.mat', 'fields': TARGET_NAME, 'pre_ext': '_B33_MANUAL_gaitEvents'} }
 
+CLEANING_OPT = {'convert_fields_to_numeric_array': {'fields': TARGET_NAME,'target_vector': 'LFP_time'},
+                  'remove_all_fields_but': {'fields': 'LFP'},
+                  'trigger_file': {'path': DATA_PATH, 'files': DATA_FILE, 'file_format': '.mat', 'fields': TARGET_NAME, 'pre_ext': '_B33_MANUAL_gaitEvents'} }
 
+td = cleaning_pipeline(td,**CLEANING_OPT)
 
 #%% PREPROCESS DATA
+
 FILTERS = {}
+PREPROCESS_OPT = {'convert_fields_to_numeric_array': {'fields': TARGET_NAME,'target_vector': 'LFP_time'},
+                  'remove_all_fields_but': {'fields': 'LFP'},
+                  'trigger_file': {'path': DATA_PATH, 'files': DATA_FILE, 'file_format': '.mat', 'fields': TARGET_NAME, 'pre_ext': '_B33_MANUAL_gaitEvents'} }
+
+td = preprocess_pipeline(td,**PREPROCESS_OPT)
 
 
 #%% Extract features

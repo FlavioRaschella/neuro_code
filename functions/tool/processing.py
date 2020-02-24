@@ -152,18 +152,6 @@ def epochs_separation(data, good_epochs, Fs, print_figure = False):
             fig.tight_layout()
     
     return epochs
-
-if __name__ == '__main__':
-    data = np.random.rand(100,10)
-    data[12:21,1] = 10
-    data[18:25,3] = 10
-    good_test = np.ones(100).astype('int'); good_test[18:21] = 0;
-    good_idx = artefacts_removal(data, n = 2, threshold = 9)
-    if (good_test!=good_idx).any():
-        raise Exception('ERROR: artefacts_removal gives the wrong result.')
-    
-    print('All tests are good!')
-    
     
 def convert_points_to_target_vector(points, vector):
     """
@@ -200,9 +188,16 @@ def convert_points_to_target_vector(points, vector):
     return vector_target
     
 if __name__ == '__main__':
+    data = np.random.rand(100,10)
+    data[12:21,1] = 10
+    data[18:25,3] = 10
+    good_test = np.ones(100).astype('int'); good_test[18:21] = 0;
+    good_idx = artefacts_removal(data, n = 2, threshold = 9)
+    if (good_test!=good_idx).any():
+        raise Exception('ERROR: Test artefacts_removal NOT passed.')
+
     vector = np.arange(11)
     points = np.array([3.1, 6.9, 9.1])
-    
     if (convert_points_to_target_vector(points, vector) - np.array([0,0,0,0,1,0,0,1,0,0,1])>0.1).any():
         raise Exception('ERROR: Test find_first NOT passed!')
     else:
