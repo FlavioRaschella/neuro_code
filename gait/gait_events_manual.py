@@ -10,8 +10,8 @@ This function is used for the manual selection of the gait events
 
 
 # Files to load
-folder = ['/Volumes/MK_EPIOS/HUMANS/from ED']
-file_num = [[3,4,5]]
+folder = ['/Volumes/MK_EPIOS/PD/from ED']
+file_num = [[6,7]]
 file_format = '.mat'
 
 # Choose the name you want for the events to select
@@ -29,7 +29,7 @@ import numpy as np
 from loading_data import load_data_from_folder
 
 # Import data processing
-from td_process import remove_fields, is_field, td_plot
+from td_utils import remove_fields, is_field
 
 
 #%% Load data  
@@ -37,7 +37,7 @@ from td_process import remove_fields, is_field, td_plot
 td = load_data_from_folder(folder = folder,file_num = file_num,file_format = file_format)
 
 # Remove fields from td
-td = remove_fields(td,['EMG','EV','LFP'])
+remove_fields(td,['EMG','EV','LFP'], exact_field = False, inplace = True)
 
 #%% Find gait initiation
 

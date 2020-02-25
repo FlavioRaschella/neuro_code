@@ -495,7 +495,7 @@ def add_field(_td, _dict, inplace = False, verbose = False):
         return td
 
 
-def is_field(_td, _str, verbose = False):
+def is_field(_td, _fields, verbose = False):
     '''
     This function checks whether fields are in a dict.
     
@@ -503,7 +503,7 @@ def is_field(_td, _str, verbose = False):
     ----------
     _td : dict / list of dict
         dict of trial data.
-    _str : string / list of strings
+    _fields : string / list of strings
         Fields in the trial data dict.
     verbose : bool, optional
         Describe what's happening in the code. The default is False.
@@ -525,24 +525,21 @@ def is_field(_td, _str, verbose = False):
         raise Exception('ERROR: _td must be a list of dictionaries!')
     
     # check string input variable
-    if type(_str) is str:
-        _str = [_str]
+    if type(_fields) is str:
+        _fields = [_fields]
         
-    if type(_str) is not list:
+    if type(_fields) is not list:
         raise Exception('ERROR: _str must be a list of strings!')
     
-    for idx,iDic in enumerate(_td):
-        for iStr in _str:
-            if type(iStr) is not list and iStr not in iDic.keys():
+    # Flatten list of fields
+    _fields = flatten_list(_fields)
+    
+    for idx, td_tmp in enumerate(_td):
+        for field in _fields:
+            if field not in td_tmp.keys():
                 return_val = False
                 if verbose:
-                    print('Field {} not in dict #{}'.format(iStr, idx))
-            elif type(iStr) is list:
-                for iSubStr in iStr:
-                    if iSubStr not in iDic.keys():
-                        return_val = False
-                        if verbose:
-                            print('Field {} not in dict #{}'.format(iSubStr, idx))
+                    print('Field {} not in dict #{}'.format(field, idx))
     
     return return_val
     # End of is_field function

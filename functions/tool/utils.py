@@ -184,6 +184,79 @@ def find_first(point, vector):
     return point_idx
 
 
+def euclidean_distance(array1, array2):
+    '''
+    This function computes the euclidean distance between 2 points
+
+    Parameters
+    ----------
+    array1 : list / np.ndarray
+        First array.
+    array2 : list / np.ndarray
+        Second array.
+
+    Returns
+    -------
+    distance : list / np.array
+        Array of the euclidean distance instant by instance.
+
+    '''
+    
+    input_list = False
+    if type(array1) is list:
+        array1 = np.array(array1)
+        input_list = True
+        
+    if type(array2) is list:
+        array2 = np.array(array2)
+        
+    if type(array1) is not np.ndarray or type(array2) is not np.ndarray:
+        raise Exception('ERROR: array(s) in input is(are) not list or np.ndarray!')
+    
+    array_diff = transpose(array1-array2, direction = 'column')
+    distance = np.linalg.norm(array_diff, axis = 1)
+    
+    if input_list:
+        distance = distance.tolist()
+    
+    return distance
+
+
+def transpose(array, direction = 'column'):
+    '''
+    This function transpose an array to a column or row array
+
+    Parameters
+    ----------
+    array : list / np.ndarray
+        Array of monopolar recording.
+    direction : str, optional
+        Direction of transposition: column or row. The default is 'column'.
+
+    Returns
+    -------
+    array : np.ndarray
+        Transposed array.
+
+    '''
+    
+    if type(array) is list:
+        array = np.array(array)
+    
+    if type(array) is not np.ndarray:
+        raise Exception('ERROR: array in input is not list or np.ndarray!')
+    
+    if direction == 'column':
+        if array.shape[0]<array.shape[1]:
+            array = array.T
+            
+    if direction == 'row':
+        if array.shape[0]>array.shape[1]:
+            array = array.T
+            
+    return array
+    
+
 if __name__ == '__main__':
     vector1 = np.arange(10)
     vector2 = np.arange(10)
@@ -220,6 +293,21 @@ if __name__ == '__main__':
         raise Exception('ERROR: Test group_fields NOT passed!')
     else:
         print('Test group_fields passed!')
+    
+    # Test the transpose function
+    if transpose(np.random.rand(100,3),'column').shape[0] != 100 or transpose(np.random.rand(100,3),'row').shape[0] != 3 or \
+        transpose(np.random.rand(3,100),'column').shape[0] != 100 or transpose(np.random.rand(3,100),'row').shape[1] != 100:
+        raise Exception('ERROR: Test transpose NOT passed!')
+    else:
+        print('Test transpose passed!')
+    
+    # Test the euclidean_distance function
+    array_ones = np.array([np.ones(100), np.zeros(100)])
+    array_zeros = np.array([np.zeros(100), np.zeros(100)])
+    if (euclidean_distance(array_ones,array_zeros) - np.ones(100) > 0.1).any():
+        raise Exception('ERROR: Test euclidean_distance NOT passed!')
+    else:
+        print('Test euclidean_distance passed!')
     
     print('All implemented tests passed!')
     
