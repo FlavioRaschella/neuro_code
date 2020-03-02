@@ -11,32 +11,32 @@ Created on Tue Feb 18 14:16:01 2020
 from td_utils import load_pipeline, cleaning_pipeline, preprocess_pipeline
 
 #%% Load data
-DATA_PATH = ['/Volumes/MK_EPIOS/HUMANS/from ED']
-DATA_FILE = [[3,4,5]]
+DATA_PATH = ['/Volumes/MK_EPIOS/PD/from ED']
+# DATA_FILE = [[3,4,5]]
+DATA_FILE = [[3,4]]
 FORMAT = '.mat'
 # TARGET_NAME = ['MANUAL_EV_RFO_time','MANUAL_EV_LFS_time','MANUAL_EV_LFO_time']
 TARGET_NAME = 'MANUAL_EV_RFS_time'
 
 LOAD_OPT = {'remove_all_fields_but': {'fields': ['LFP_time','LFP_BIP7','LFP_BIP8','LFP_BIP9','LFP_BIP10','LFP_BIP11','LFP_BIP12']},
             'trigger_file': {'path': DATA_PATH, 'files': DATA_FILE, 'file_format': '.mat', 'fields': TARGET_NAME, 'pre_ext': '_B33_MANUAL_gaitEvents'},
-            'convert_fields_to_numeric_array': {'fields': TARGET_NAME,'target_vector': 'LFP_time'}}
+            'convert_fields_to_numeric_array': {'fields': TARGET_NAME,'target_vector': 'LFP_time'},
+            'params': {'signals': ['LFP_BIP7','LFP_BIP8','LFP_BIP9','LFP_BIP10','LFP_BIP11','LFP_BIP12'], 'time': 'LFP_time', 'Fs': 8192} }
 td = load_pipeline(DATA_PATH, DATA_FILE, FORMAT, **LOAD_OPT)
 
 #%% CLEANING DATA
-CHANNELS = [['LFP_BIP10','LFP_BIP11'],['LFP_BIP11','LFP_BIP12']]
+CHANNELS = [['LFP_BIP7','LFP_BIP8'],['LFP_BIP8','LFP_BIP9'],['LFP_BIP10','LFP_BIP11'],['LFP_BIP11','LFP_BIP12']]
 
-CLEANING_OPT = {'convert_fields_to_numeric_array': {'fields': TARGET_NAME,'target_vector': 'LFP_time'},
-                  'remove_all_fields_but': {'fields': 'LFP'},
-                  'trigger_file': {'path': DATA_PATH, 'files': DATA_FILE, 'file_format': '.mat', 'fields': TARGET_NAME, 'pre_ext': '_B33_MANUAL_gaitEvents'} }
+CLEANING_OPT = {'combine_fields': {'fields': CHANNELS, 'method': 'subtract', 'remove_selected_fields': True, 'save_name_to_params': True, 'inplace': True},
+                'remove_artefacts': {'method': 'amplitude', 'threshold': 300}}
 
 td = cleaning_pipeline(td,**CLEANING_OPT)
 
 #%% PREPROCESS DATA
 
 FILTERS = {}
-PREPROCESS_OPT = {'convert_fields_to_numeric_array': {'fields': TARGET_NAME,'target_vector': 'LFP_time'},
-                  'remove_all_fields_but': {'fields': 'LFP'},
-                  'trigger_file': {'path': DATA_PATH, 'files': DATA_FILE, 'file_format': '.mat', 'fields': TARGET_NAME, 'pre_ext': '_B33_MANUAL_gaitEvents'} }
+PREPROCESS_OPT = {'': {'': ,'': ''},
+                  '': {'': ,'': ''}}
 
 td = preprocess_pipeline(td,**PREPROCESS_OPT)
 

@@ -41,7 +41,7 @@ def group_fields(_dict, _fields):
     
     return data
 
-def flatten_list(_list, _tranform_to_array = False):
+def flatten_list(_list, _tranform_to_array = False, unique = True):
     '''
     This function flattens a list of lists to a simple list
 
@@ -78,10 +78,36 @@ def flatten_list(_list, _tranform_to_array = False):
                 
         list_flat = list_flat_new
     
+    if unique:
+        list_flat = unique_list(list_flat)
+    
     if _tranform_to_array:
         list_flat - np.array(list_flat)
     
     return list_flat
+
+def unique_list(_list):
+    '''
+    This function takes the unique elements in a list.
+
+    Parameters
+    ----------
+    _list : list
+        List of elements.
+
+    Returns
+    -------
+    list_unique : list
+        List with unique elements.
+
+    '''
+    
+    if type(_list) is not list:
+        raise Exception('ERROR: Input list is not a list!')
+    
+    list_unique = list(set(_list))
+    
+    return list_unique
 
 def bipolar(array1, array2):
     '''

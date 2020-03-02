@@ -119,6 +119,7 @@ for iTd, td_tmp in enumerate(td):
     td_init_tmp = dict()
     
     td_init_tmp['File'] = td_tmp['File']
+    td_init_tmp['Folder'] = td_tmp['Folder']
     # Collect kinematic data
     td_init_tmp[signal_kin_time] = td_tmp[signal_kin_time]
     td_init_tmp['KIN_Fs'] = np.round(1/(td_tmp[signal_kin_time][1]-td_tmp[signal_kin_time][0])).astype('int')
@@ -181,22 +182,24 @@ for iTd, td_tmp in enumerate(td):
 #%% Save data
 import pickle
 
-pickle_out = open('/Volumes/MK_EPIOS/PD/from ED/td_3_4_5.pickle','wb')
+pickle_out = open('/Volumes/MK_EPIOS/PD/from ED/td_6_7.pickle','wb')
 pickle.dump([td, td_init], pickle_out)
 pickle_out.close()
 
 #%% Load data
 import pickle
 
+# pickle_in = open('/Volumes/MK_EPIOS/PD/from ED/td_6_7.pickle',"rb")
 pickle_in = open('/Volumes/MK_EPIOS/PD/from ED/td_3_4_5.pickle',"rb")
 td, td_init = pickle.load(pickle_in)
-#%% Add Angles
+#%% Add Kinematic variables
 from kinematics import compute_angle_3d
+from utils import euclidean_distance
 
 signal_angles = ['KIN_angle_leg_right','KIN_angle_leg_left',
                  'KIN_angle_trunk_right','KIN_angle_trunk_left',
                  'KIN_angle_arm_right','KIN_angle_arm_left']
-signal_displace = ['KIN_Left_UpLeg-Foot_P_x','KIN_Left_UpLeg-Foot_P_z']
+signal_displace = ['KIN_Right_UpLeg-Foot_dist','KIN_Left_UpLeg-Foot_dist']
 
 
 for iTd, td_tmp in enumerate(td_init):
@@ -230,9 +233,13 @@ for iTd, td_tmp in enumerate(td_init):
                               np.array(td_tmp['KIN_LeftHand_P_x'])-np.array(td_tmp['KIN_LeftShoulder_P_x'])]).T
     td_tmp[signal_angles[5]] = compute_angle_3d(vect_arm_left, np.tile([1,0,0],(vect_arm_left.shape[0],1)),'acos')-90
     
+    vect_legUp_P_xz_left = np.array([np.array(td_tmp['KIN_LeftUpLeg_P_x']),np.array(td_tmp['KIN_LeftUpLeg_P_z'])])
+    vect_Foot_P_xz_left = np.array([np.array(td_tmp['KIN_LeftFoot_P_x']),np.array(td_tmp['KIN_LeftFoot_P_z'])])
+    vect_legUp_P_xz_right = np.array([np.array(td_tmp['KIN_RightUpLeg_P_x']),np.array(td_tmp['KIN_RightUpLeg_P_z'])])
+    vect_Foot_P_xz_right = np.array([np.array(td_tmp['KIN_RightFoot_P_x']),np.array(td_tmp['KIN_RightFoot_P_z'])])
     
-    td_tmp[signal_displace[0]] = np.array(td_tmp['KIN_LeftUpLeg_P_x'])-np.array(td_tmp['KIN_LeftFoot_P_x'])
-    td_tmp[signal_displace[1]] = np.array(td_tmp['KIN_LeftUpLeg_P_z'])-np.array(td_tmp['KIN_LeftFoot_P_z'])
+    td_tmp[signal_displace[0]] = euclidean_distance(vect_legUp_P_xz_right, vect_Foot_P_xz_right)
+    td_tmp[signal_displace[1]] = euclidean_distance(vect_legUp_P_xz_left, vect_Foot_P_xz_left)
     
     td_tmp['KIN_name'] = signal_angles + signal_displace + ['KIN_RightFoot_P_y','KIN_LeftFoot_P_y']
 
@@ -251,11 +258,11 @@ remove_fields(td_init, str2rem, exact_field = True, inplace = True)
 #%% Get intervals of interest
 
 # Set offset for expanding the intevals
-offset_pre_sec = 2 # seconds
+offset_pre_sec = 1 # seconds
 
 td_inteval = []
 for iTd, td_tmp in enumerate(td):
-    print('Preparing intervals in file {}: {}/{}'.format(td_tmp['File'], iTd+1, dataset_len))
+    print('Preparing intervals in file {}: {}/{}'.format(td_tmp['File'], iTd+1, len(td)))
     td_init_tmp = dict()
     # Set time interval
     for side in events_side:
@@ -318,18 +325,18 @@ for iTd, td_tmp in enumerate(td_init):
     for side in events_side:
         td_init_tmp = dict()
         # Store general data
-        td_init_tmp['KIN_name'] = td_tmp['KIN_name']
-        td_init_tmp['EMG_name'] = td_tmp['EMG_name']
+        td_init_tmp['KIN_name']     = td_tmp['KIN_name']
+        td_init_tmp['EMG_name']     = td_tmp['EMG_name']
         td_init_tmp['LFP_lbp_name'] = td_tmp['LFP_lbp_name']
         td_init_tmp['LFP_hbp_name'] = td_tmp['LFP_hbp_name']
-        td_init_tmp['KIN_time'] = td_tmp['KIN_time']
-        td_init_tmp['EMG_time'] = td_tmp['EMG_time']
-        td_init_tmp['LFP_time'] = td_tmp['LFP_time']
-        td_init_tmp['KIN_Fs'] = td_tmp['KIN_Fs']
-        td_init_tmp['EMG_Fs'] = td_tmp['EMG_Fs']
-        td_init_tmp['LFP_Fs'] = td_tmp['LFP_Fs']
-        td_init_tmp['File'] = td_tmp['File']
-        td_init_tmp['Folder'] = td_tmp['Folder']
+        td_init_tmp['KIN_time']     = td_tmp['KIN_time']
+        td_init_tmp['EMG_time']     = td_tmp['EMG_time']
+        td_init_tmp['LFP_time']     = td_tmp['LFP_time']
+        td_init_tmp['KIN_Fs']       = td_tmp['KIN_Fs']
+        td_init_tmp['EMG_Fs']       = td_tmp['EMG_Fs']
+        td_init_tmp['LFP_Fs']       = td_tmp['LFP_Fs']
+        td_init_tmp['File']         = td_tmp['File']
+        td_init_tmp['Folder']       = td_tmp['Folder']
         
         # Collect kinematic data
         interval_kin = [np.where(np.logical_and(np.array(td_tmp['KIN_time']) >= interval[0], np.array(td_tmp['KIN_time']) <= interval[1]))[0] for interval in td_tmp[side]['intervals']]
@@ -810,13 +817,247 @@ for td_rt_tmp, td_lt_tmp in zip(td_rt,td_lt):
     
 #%% Plot data
 from stats import confidence_interval
+import matplotlib.pyplot as plt
+
+def col_scale(n,shade = 'gray'):
+    if shade == 'gray':
+        col = np.array([np.linspace(0,0.8,n), np.linspace(0,0.8,n), np.linspace(0,0.8,n)]).T
+    elif shade == 'r':
+        col = np.array([np.linspace(0,0.8,n), np.linspace(0,0,n), np.linspace(0,0,n)]).T
+    elif shade == 'g':
+        col = np.array([np.linspace(0,0,n), np.linspace(0,0.8,n), np.linspace(0,0,n)]).T
+    elif shade == 'b':
+        col = np.array([np.linspace(0,0,n), np.linspace(0,0,n), np.linspace(0,0.8,n)]).T
+    return col
+
+def join_lists(list1,list2):
+    if len(list1) != len(list2):
+        raise Exception('ERROR: lists have different length.')
+    
+    lists = []
+    for list1_el, list2_el in zip(list1,list2):
+        lists.append(np.concatenate((list1_el,list2_el), axis = 0))
+    return lists
+
 
 lfp_lb_name = td_lt[0]['LFP_lbp_name_inter']
 lfp_lb_pre_name = td_lt[0]['LFP_lbp_name_inter_pre']
 lfp_hb_name = td_lt[0]['LFP_hbp_name_inter']
 lfp_hb_pre_name = td_lt[0]['LFP_hbp_name_inter_pre']
 
-# Left side
+# Left side singular trials
+for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lfp_hb_name,lfp_lb_pre_name,lfp_hb_pre_name):
+    for td_lt_tmp in td_lt:
+        # KIN
+        singal_KIN_foot_r = join_lists(td_lt_tmp['KIN_RightFoot_P_y_pre_inter'],td_lt_tmp['KIN_RightFoot_P_y_inter'])
+        singal_KIN_arm_r = join_lists(td_lt_tmp['KIN_angle_arm_right_pre_inter'],td_lt_tmp['KIN_angle_arm_right_inter'])
+        singal_KIN_trunk_r = join_lists(td_lt_tmp['KIN_angle_trunk_right_pre_inter'],td_lt_tmp['KIN_angle_trunk_right_inter'])
+        singal_KIN_leg_r = join_lists(td_lt_tmp['KIN_angle_leg_right_pre_inter'],td_lt_tmp['KIN_angle_leg_right_inter'])
+        
+        singal_KIN_foot_l = join_lists(td_lt_tmp['KIN_LeftFoot_P_y_pre_inter'],td_lt_tmp['KIN_LeftFoot_P_y_inter'])
+        singal_KIN_arm_l =  join_lists(td_lt_tmp['KIN_angle_arm_left_pre_inter'],td_lt_tmp['KIN_angle_arm_left_inter'])
+        singal_KIN_trunk_l = join_lists(td_lt_tmp['KIN_angle_trunk_left_pre_inter'],td_lt_tmp['KIN_angle_trunk_left_inter'])
+        singal_KIN_leg_l =  join_lists(td_lt_tmp['KIN_angle_leg_left_pre_inter'],td_lt_tmp['KIN_angle_leg_left_inter'])
+        
+        singal_KIN_displacement_r = join_lists(td_lt_tmp['KIN_Right_UpLeg-Foot_dist_pre_inter'],td_lt_tmp['KIN_Right_UpLeg-Foot_dist_inter'])
+        singal_KIN_displacement_l = join_lists(td_lt_tmp['KIN_Left_UpLeg-Foot_dist_pre_inter'],td_lt_tmp['KIN_Left_UpLeg-Foot_dist_inter'])
+        
+        # EMG
+        singal_EMG_lg_r = join_lists(td_lt_tmp['EMG_RLG_pre_inter'],td_lt_tmp['EMG_RLG_inter'])
+        singal_EMG_vl_r = join_lists(td_lt_tmp['EMG_RVL_pre_inter'],td_lt_tmp['EMG_RVL_inter'])
+        singal_EMG_ta_r = join_lists(td_lt_tmp['EMG_RTA_pre_inter'],td_lt_tmp['EMG_RTA_inter'])
+        singal_EMG_rf_r = join_lists(td_lt_tmp['EMG_RRF_pre_inter'],td_lt_tmp['EMG_RRF_inter'])
+        
+        singal_EMG_lg_l = join_lists(td_lt_tmp['EMG_LLG_pre_inter'],td_lt_tmp['EMG_LLG_inter'])
+        singal_EMG_vl_l = join_lists(td_lt_tmp['EMG_LVL_pre_inter'],td_lt_tmp['EMG_LVL_inter'])
+        singal_EMG_ta_l = join_lists(td_lt_tmp['EMG_LTA_pre_inter'],td_lt_tmp['EMG_LTA_inter'])
+        singal_EMG_rf_l = join_lists(td_lt_tmp['EMG_LRF_pre_inter'],td_lt_tmp['EMG_LRF_inter'])
+        
+        # LFP lowbeta
+        singal_LFP_lb = join_lists(td_lt_tmp[lfp_l_pre_name],td_lt_tmp[lfp_l_name])
+        
+        # LFP highbeta
+        singal_LFP_hb = join_lists(td_lt_tmp[lfp_h_pre_name],td_lt_tmp[lfp_h_name])
+        
+        col = col_scale(len(singal_KIN_foot_r))
+        col_r = col_scale(len(singal_KIN_foot_r),'r')
+        col_g = col_scale(len(singal_KIN_foot_r),'g')
+        col_b = col_scale(len(singal_KIN_foot_r),'b')
+        
+        # LFP & EMGs
+        fig, ax = plt.subplots(6,1)
+        plt.suptitle('LEFT INIT: LFP & EMGs')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_hb).T)
+        ax[0].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[0].plot(m, color='r', linewidth=2)
+        ax[0].set_title(lfp_h_name)
+        ax[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[0].vlines(td_interval_lt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_lb).T)
+        ax[1].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[1].plot(m, color='r', linewidth=2)
+        ax[1].set_title(lfp_l_name)
+        ax[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[1].vlines(td_interval_lt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_EMG_vl_l).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[2].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_EMG_vl_r).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[2].plot(m, color='b', linewidth=2)
+        ax[2].set_title('EMG LVL : k; EMG RVL : b')
+        ax[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[2].vlines(td_interval_lt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_EMG_rf_l).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[3].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_EMG_rf_r).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[3].plot(m, color='b', linewidth=2)
+        ax[3].set_title('EMG LRF : k; EMG RRF : b')
+        ax[3].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[3].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_EMG_lg_l).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[4].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_EMG_lg_r).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[4].plot(m, color='b', linewidth=2)
+        ax[4].set_title('EMG LLG : k; EMG RLG : b')
+        ax[4].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[4].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_EMG_ta_l).T)
+        ax[5].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[5].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_EMG_ta_r).T)
+        ax[5].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[5].plot(m, color='b', linewidth=2)
+        ax[5].set_title('EMG LTA : k; EMG RTA : b')
+        ax[5].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[5].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        plt.tight_layout()
+        fig.savefig('{}_{}_KIN_LEFT.pdf'.format(path.join(td_lt_tmp['Folder'],td_lt_tmp['File'][:-4]), lfp_h_name[0:19]), bbox_inches='tight')
+        
+        # LFP & KIN
+        fig, ax = plt.subplots(6,1)
+        plt.suptitle('LEFT INIT: LFP & KIN')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_hb).T)
+        ax[0].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[0].plot(m, color='r', linewidth=2)
+        ax[0].set_title(lfp_h_name)
+        ax[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[0].vlines(td_interval_lt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_lb).T)
+        ax[1].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[1].plot(m, color='r', linewidth=2)
+        ax[1].set_title(lfp_l_name)
+        ax[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[1].vlines(td_interval_lt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_arm_l).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[2].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_arm_r).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[2].plot(m, color='b', linewidth=2)
+        ax[2].set_title('LEFT ANG ARM: k; RIGHT ANG ARM: b')
+        ax[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[2].vlines(td_interval_lt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_trunk_l).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[3].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_trunk_r).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[3].plot(m, color='b', linewidth=2)
+        ax[3].set_title('LEFT ANG TRUNK: k; RIGHT ANG TRUNK: b')
+        ax[3].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[3].vlines(td_interval_lt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_leg_l).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[4].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_leg_r).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[4].plot(m, color='b', linewidth=2)
+        ax[4].set_title('LEFT ANG LEG: k; RIGHT ANG LEG: b')
+        ax[4].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[4].vlines(td_interval_lt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_foot_l).T)
+        ax[5].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[5].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_foot_r).T)
+        ax[5].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[5].plot(m, color='b', linewidth=2)
+        ax[5].set_title('LEFT FOOT: k; RIGHT FOOT: b')
+        ax[5].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[5].vlines(td_interval_lt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+    
+        plt.tight_layout()
+        fig.savefig('{}_{}_EMG_LEFT.pdf'.format(path.join(td_lt_tmp['Folder'],td_lt_tmp['File'][:-4]), lfp_h_name[0:19]), bbox_inches='tight')
+        
+        # LFP & KIN & EMG
+        fig, ax = plt.subplots(5,1)
+        plt.suptitle('LEFT INIT: LFP & KIN & EMG')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_hb).T)
+        ax[0].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[0].plot(m, color='r', linewidth=2)
+        ax[0].set_title(lfp_h_name)
+        ax[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[0].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_lb).T)
+        ax[1].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[1].plot(m, color='r', linewidth=2)
+        ax[1].set_title(lfp_l_name)
+        ax[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[1].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_EMG_vl_l).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[2].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_EMG_vl_r).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[2].plot(m, color='b', linewidth=2)
+        ax[2].set_title('EMG LVL : k; EMG RVL : b')
+        ax[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[2].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_displacement_l).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[3].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_displacement_r).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[3].plot(m, color='b', linewidth=2)
+        ax[3].set_title('DISP L : k; DISP R : b')
+        ax[3].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[3].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_foot_l).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[4].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_foot_r).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[4].plot(m, color='b', linewidth=2)
+        ax[4].set_title('LEFT FOOT: k; RIGHT FOOT: b')
+        ax[4].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[4].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+    
+        plt.tight_layout()
+        fig.savefig('{}_{}_EMG_KIN_LEFT.pdf'.format(path.join(td_lt_tmp['Folder'],td_lt_tmp['File'][:-4]), lfp_h_name[0:19]), bbox_inches='tight')
+
+# Left side all trials
 for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lfp_hb_name,lfp_lb_pre_name,lfp_hb_pre_name):
     # break
     singal_KIN_foot_r  = []
@@ -827,6 +1068,9 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
     singal_KIN_arm_l   = []
     singal_KIN_trunk_l = []
     singal_KIN_leg_l   = []
+    
+    singal_KIN_displacement_r = []
+    singal_KIN_displacement_l = []
     
     singal_EMG_lg_r = []
     singal_EMG_vl_r = []
@@ -840,8 +1084,11 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
     singal_LFP_lb = []
     singal_LFP_hb = []
     
+    files = []
+    
     for td_lt_tmp in td_lt:
         # break
+        files.append(td_lt_tmp['File'][-5:-4])
         # KIN
         singal_KIN_foot_r.extend( join_lists(td_lt_tmp['KIN_RightFoot_P_y_pre_inter'],td_lt_tmp['KIN_RightFoot_P_y_inter']) )
         singal_KIN_arm_r.extend(  join_lists(td_lt_tmp['KIN_angle_arm_right_pre_inter'],td_lt_tmp['KIN_angle_arm_right_inter']) )
@@ -852,6 +1099,9 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
         singal_KIN_arm_l.extend(  join_lists(td_lt_tmp['KIN_angle_arm_left_pre_inter'],td_lt_tmp['KIN_angle_arm_left_inter']) )
         singal_KIN_trunk_l.extend(join_lists(td_lt_tmp['KIN_angle_trunk_left_pre_inter'],td_lt_tmp['KIN_angle_trunk_left_inter']) )
         singal_KIN_leg_l.extend(  join_lists(td_lt_tmp['KIN_angle_leg_left_pre_inter'],td_lt_tmp['KIN_angle_leg_left_inter']) )
+        
+        singal_KIN_displacement_r.extend(  join_lists(td_lt_tmp['KIN_Right_UpLeg-Foot_dist_pre_inter'],td_lt_tmp['KIN_Right_UpLeg-Foot_dist_inter']) )
+        singal_KIN_displacement_l.extend(  join_lists(td_lt_tmp['KIN_Left_UpLeg-Foot_dist_pre_inter'],td_lt_tmp['KIN_Left_UpLeg-Foot_dist_inter']) )
         
         # EMG
         singal_EMG_lg_r.extend( join_lists(td_lt_tmp['EMG_RLG_pre_inter'],td_lt_tmp['EMG_RLG_inter']) )
@@ -870,11 +1120,10 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
         # LFP highbeta
         singal_LFP_hb.extend( join_lists(td_lt_tmp[lfp_h_pre_name],td_lt_tmp[lfp_h_name]) )
         
-    
-    col = col_scale(len(singal_KIN_foot))
-    col_r = col_scale(len(singal_KIN_foot),'r')
-    col_g = col_scale(len(singal_KIN_foot),'g')
-    col_b = col_scale(len(singal_KIN_foot),'b')
+    col = col_scale(len(singal_KIN_foot_r))
+    col_r = col_scale(len(singal_KIN_foot_r),'r')
+    col_g = col_scale(len(singal_KIN_foot_r),'g')
+    col_b = col_scale(len(singal_KIN_foot_r),'b')
     
     # LFP & EMGs
     fig, ax = plt.subplots(6,1)
@@ -935,7 +1184,7 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
     ax[5].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
     
     plt.tight_layout()
-    fig.savefig('{}_{}_KIN_LEFT.pdf'.format(path.join(td_lt_tmp['Folder'],td_lt_tmp['File']), lfp_h_name[0:19]), bbox_inches='tight')
+    fig.savefig('{}_{}_KIN_LEFT.pdf'.format(path.join(td_lt_tmp['Folder'],td_lt_tmp['File'][:-6] + '_' + '_'.join(files)), lfp_h_name[0:19]), bbox_inches='tight')
     
     # LFP & KIN
     fig, ax = plt.subplots(6,1)
@@ -991,15 +1240,279 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
     m, dw2, up2 = confidence_interval(np.array(singal_KIN_foot_r).T)
     ax[5].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
     ax[5].plot(m, color='b', linewidth=2)
-    ax[5].set_title('LEFT ANG FOOT: k; RIGHT ANG FOOT: b')
+    ax[5].set_title('LEFT FOOT: k; RIGHT FOOT: b')
     ax[5].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
     ax[5].vlines(td_interval_lt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
 
     plt.tight_layout()
-    fig.savefig('{}_{}_EMG_LEFT.pdf'.format(path.join(td_lt_tmp['Folder'],td_lt_tmp['File']), lfp_h_name[0:19]), bbox_inches='tight')
+    fig.savefig('{}_{}_EMG_LEFT.pdf'.format(path.join(td_lt_tmp['Folder'],td_lt_tmp['File'][:-6] + '_' + '_'.join(files)), lfp_h_name[0:19]), bbox_inches='tight')
+    
+    # LFP & KIN & EMG
+    fig, ax = plt.subplots(5,1)
+    plt.suptitle('RIGHT INIT: LFP & KIN & EMG')
+    
+    m, dw, up = confidence_interval(np.array(singal_LFP_hb).T)
+    ax[0].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+    ax[0].plot(m, color='r', linewidth=2)
+    ax[0].set_title(lfp_h_name)
+    ax[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    ax[0].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+    
+    m, dw, up = confidence_interval(np.array(singal_LFP_lb).T)
+    ax[1].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+    ax[1].plot(m, color='r', linewidth=2)
+    ax[1].set_title(lfp_l_name)
+    ax[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    ax[1].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+    
+    m, dw1, up1 = confidence_interval(np.array(singal_EMG_vl_l).T)
+    ax[2].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+    ax[2].plot(m, color='k', linewidth=2)
+    m, dw2, up2 = confidence_interval(np.array(singal_EMG_vl_r).T)
+    ax[2].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+    ax[2].plot(m, color='b', linewidth=2)
+    ax[2].set_title('EMG LVL : k; EMG RVL : b')
+    ax[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    ax[2].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+    
+    m, dw1, up1 = confidence_interval(np.array(singal_KIN_displacement_l).T)
+    ax[3].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+    ax[3].plot(m, color='k', linewidth=2)
+    m, dw2, up2 = confidence_interval(np.array(singal_KIN_displacement_r).T)
+    ax[3].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+    ax[3].plot(m, color='b', linewidth=2)
+    ax[3].set_title('DISP L : k; DISP R : b')
+    ax[3].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    ax[3].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+    
+    m, dw1, up1 = confidence_interval(np.array(singal_KIN_foot_l).T)
+    ax[4].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+    ax[4].plot(m, color='k', linewidth=2)
+    m, dw2, up2 = confidence_interval(np.array(singal_KIN_foot_r).T)
+    ax[4].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+    ax[4].plot(m, color='b', linewidth=2)
+    ax[4].set_title('LEFT FOOT: k; RIGHT FOOT: b')
+    ax[4].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    ax[4].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
 
+    plt.tight_layout()
+    fig.savefig('{}_{}_EMG_KIN_LEFT.pdf'.format(path.join(td_lt_tmp['Folder'],td_lt_tmp['File'][:-6] + '_' + '_'.join(files)), lfp_h_name[0:19]), bbox_inches='tight')
 
-# Right side    
+# Right side singular trial
+for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lfp_hb_name,lfp_lb_pre_name,lfp_hb_pre_name):    
+    for td_rt_tmp in td_rt:
+        # break
+        # KIN
+        singal_KIN_foot_r   = join_lists(td_rt_tmp['KIN_RightFoot_P_y_pre_inter'],td_rt_tmp['KIN_RightFoot_P_y_inter'])
+        singal_KIN_arm_r    = join_lists(td_rt_tmp['KIN_angle_arm_right_pre_inter'],td_rt_tmp['KIN_angle_arm_right_inter'])
+        singal_KIN_trunk_r  = join_lists(td_rt_tmp['KIN_angle_trunk_right_pre_inter'],td_rt_tmp['KIN_angle_trunk_right_inter'])
+        singal_KIN_leg_r    = join_lists(td_rt_tmp['KIN_angle_leg_right_pre_inter'],td_rt_tmp['KIN_angle_leg_right_inter'])
+        
+        singal_KIN_foot_l   = join_lists(td_rt_tmp['KIN_LeftFoot_P_y_pre_inter'],td_rt_tmp['KIN_LeftFoot_P_y_inter'])
+        singal_KIN_arm_l    = join_lists(td_rt_tmp['KIN_angle_arm_left_pre_inter'],td_rt_tmp['KIN_angle_arm_left_inter'])
+        singal_KIN_trunk_l  = join_lists(td_rt_tmp['KIN_angle_trunk_left_pre_inter'],td_rt_tmp['KIN_angle_trunk_left_inter'])
+        singal_KIN_leg_l    = join_lists(td_rt_tmp['KIN_angle_leg_left_pre_inter'],td_rt_tmp['KIN_angle_leg_left_inter'])
+        
+        singal_KIN_displacement_r = join_lists(td_rt_tmp['KIN_Right_UpLeg-Foot_dist_pre_inter'],td_rt_tmp['KIN_Right_UpLeg-Foot_dist_inter'])
+        singal_KIN_displacement_l = join_lists(td_rt_tmp['KIN_Left_UpLeg-Foot_dist_pre_inter'],td_rt_tmp['KIN_Left_UpLeg-Foot_dist_inter'])
+    
+        # EMG
+        singal_EMG_lg_r     = join_lists(td_rt_tmp['EMG_RLG_pre_inter'],td_rt_tmp['EMG_RLG_inter'])
+        singal_EMG_vl_r     = join_lists(td_rt_tmp['EMG_RVL_pre_inter'],td_rt_tmp['EMG_RVL_inter'])
+        singal_EMG_ta_r     = join_lists(td_rt_tmp['EMG_RTA_pre_inter'],td_rt_tmp['EMG_RTA_inter'])
+        singal_EMG_rf_r     = join_lists(td_rt_tmp['EMG_RRF_pre_inter'],td_rt_tmp['EMG_RRF_inter'])
+        
+        singal_EMG_lg_l     = join_lists(td_rt_tmp['EMG_LLG_pre_inter'],td_rt_tmp['EMG_LLG_inter'])
+        singal_EMG_vl_l     = join_lists(td_rt_tmp['EMG_LVL_pre_inter'],td_rt_tmp['EMG_LVL_inter'])
+        singal_EMG_ta_l     = join_lists(td_rt_tmp['EMG_LTA_pre_inter'],td_rt_tmp['EMG_LTA_inter'])
+        singal_EMG_rf_l     = join_lists(td_rt_tmp['EMG_LRF_pre_inter'],td_rt_tmp['EMG_LRF_inter'])
+        
+        # LFP lowbeta
+        singal_LFP_lb = join_lists(td_rt_tmp[lfp_l_pre_name],td_rt_tmp[lfp_l_name])
+        
+        # LFP highbeta
+        singal_LFP_hb = join_lists(td_rt_tmp[lfp_h_pre_name],td_rt_tmp[lfp_h_name])
+    
+        col = col_scale(len(singal_KIN_foot_r))
+        col_r = col_scale(len(singal_KIN_foot_r),'r')
+        col_g = col_scale(len(singal_KIN_foot_r),'g')
+        col_b = col_scale(len(singal_KIN_foot_r),'b')
+        
+        # LFP & EMGs
+        fig, ax = plt.subplots(6,1)
+        plt.suptitle('RIGHT INIT: LFP & EMGs')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_hb).T)
+        ax[0].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[0].plot(m, color='r', linewidth=2)
+        ax[0].set_title(lfp_h_name)
+        ax[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[0].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_lb).T)
+        ax[1].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[1].plot(m, color='r', linewidth=2)
+        ax[1].set_title(lfp_l_name)
+        ax[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[1].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_EMG_vl_l).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[2].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_EMG_vl_r).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[2].plot(m, color='b', linewidth=2)
+        ax[2].set_title('EMG LVL : k; EMG RVL : b')
+        ax[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[2].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_EMG_rf_l).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[3].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_EMG_rf_r).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[3].plot(m, color='b', linewidth=2)
+        ax[3].set_title('EMG LRF : k; EMG RRF : b')
+        ax[3].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[3].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_EMG_lg_l).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[4].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_EMG_lg_r).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[4].plot(m, color='b', linewidth=2)
+        ax[4].set_title('EMG LLG : k; EMG RLG : b')
+        ax[4].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[4].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_EMG_ta_l).T)
+        ax[5].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[5].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_EMG_ta_r).T)
+        ax[5].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[5].plot(m, color='b', linewidth=2)
+        ax[5].set_title('EMG LTA : k; EMG RTA : b')
+        ax[5].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[5].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        plt.tight_layout()
+        fig.savefig('{}_{}_KIN_RIGHT.pdf'.format(path.join(td_rt_tmp['Folder'],td_rt_tmp['File'][:-4]), lfp_h_name[0:19]), bbox_inches='tight')
+        
+        # LFP & KIN
+        fig, ax = plt.subplots(6,1)
+        plt.suptitle('RIGHT INIT: LFP & KIN')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_hb).T)
+        ax[0].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[0].plot(m, color='r', linewidth=2)
+        ax[0].set_title(lfp_h_name)
+        ax[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[0].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_lb).T)
+        ax[1].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[1].plot(m, color='r', linewidth=2)
+        ax[1].set_title(lfp_l_name)
+        ax[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[1].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_arm_l).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[2].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_arm_r).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[2].plot(m, color='b', linewidth=2)
+        ax[2].set_title('LEFT ANG ARM: k; RIGHT ANG ARM: b')
+        ax[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[2].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_trunk_l).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[3].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_trunk_r).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[3].plot(m, color='b', linewidth=2)
+        ax[3].set_title('LEFT ANG TRUNK: k; RIGHT ANG TRUNK: b')
+        ax[3].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[3].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_leg_l).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[4].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_leg_r).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[4].plot(m, color='b', linewidth=2)
+        ax[4].set_title('LEFT ANG LEG: k; RIGHT ANG LEG: b')
+        ax[4].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[4].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_foot_l).T)
+        ax[5].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[5].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_foot_r).T)
+        ax[5].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[5].plot(m, color='b', linewidth=2)
+        ax[5].set_title('LEFT FOOT: k; RIGHT FOOT: b')
+        ax[5].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[5].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+    
+        plt.tight_layout()
+        fig.savefig('{}_{}_EMG_RIGHT.pdf'.format(path.join(td_rt_tmp['Folder'],td_rt_tmp['File'][:-4]), lfp_h_name[0:19]), bbox_inches='tight')
+
+        # LFP & KIN & EMG
+        fig, ax = plt.subplots(5,1)
+        plt.suptitle('RIGHT INIT: LFP & KIN & EMG')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_hb).T)
+        ax[0].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[0].plot(m, color='r', linewidth=2)
+        ax[0].set_title(lfp_h_name)
+        ax[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[0].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw, up = confidence_interval(np.array(singal_LFP_lb).T)
+        ax[1].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+        ax[1].plot(m, color='r', linewidth=2)
+        ax[1].set_title(lfp_l_name)
+        ax[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[1].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_EMG_vl_l).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[2].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_EMG_vl_r).T)
+        ax[2].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[2].plot(m, color='b', linewidth=2)
+        ax[2].set_title('EMG LVL : k; EMG RVL : b')
+        ax[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[2].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_displacement_l).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[3].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_displacement_r).T)
+        ax[3].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[3].plot(m, color='b', linewidth=2)
+        ax[3].set_title('DISP L : k; DISP R : b')
+        ax[3].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[3].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+        
+        m, dw1, up1 = confidence_interval(np.array(singal_KIN_foot_l).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+        ax[4].plot(m, color='k', linewidth=2)
+        m, dw2, up2 = confidence_interval(np.array(singal_KIN_foot_r).T)
+        ax[4].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+        ax[4].plot(m, color='b', linewidth=2)
+        ax[4].set_title('LEFT FOOT: k; RIGHT FOOT: b')
+        ax[4].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+        ax[4].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+    
+        plt.tight_layout()
+        fig.savefig('{}_{}_EMG_KIN_RIGHT.pdf'.format(path.join(td_rt_tmp['Folder'],td_rt_tmp['File'][:-4]), lfp_h_name[0:19]), bbox_inches='tight')
+    
+
+# Right side all
 for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lfp_hb_name,lfp_lb_pre_name,lfp_hb_pre_name):
     # break
     singal_KIN_foot_r  = []
@@ -1010,6 +1523,9 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
     singal_KIN_arm_l   = []
     singal_KIN_trunk_l = []
     singal_KIN_leg_l   = []
+    
+    singal_KIN_displacement_r = []
+    singal_KIN_displacement_l = []
     
     singal_EMG_lg_r = []
     singal_EMG_vl_r = []
@@ -1023,8 +1539,11 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
     singal_LFP_lb = []
     singal_LFP_hb = []
     
+    files = []
+    
     for td_rt_tmp in td_rt:
         # break
+        files.append(td_rt_tmp['File'][-5:-4])
         # KIN
         singal_KIN_foot_r.extend( join_lists(td_rt_tmp['KIN_RightFoot_P_y_pre_inter'],td_rt_tmp['KIN_RightFoot_P_y_inter']) )
         singal_KIN_arm_r.extend(  join_lists(td_rt_tmp['KIN_angle_arm_right_pre_inter'],td_rt_tmp['KIN_angle_arm_right_inter']) )
@@ -1035,6 +1554,9 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
         singal_KIN_arm_l.extend(  join_lists(td_rt_tmp['KIN_angle_arm_left_pre_inter'],td_rt_tmp['KIN_angle_arm_left_inter']) )
         singal_KIN_trunk_l.extend(join_lists(td_rt_tmp['KIN_angle_trunk_left_pre_inter'],td_rt_tmp['KIN_angle_trunk_left_inter']) )
         singal_KIN_leg_l.extend(  join_lists(td_rt_tmp['KIN_angle_leg_left_pre_inter'],td_rt_tmp['KIN_angle_leg_left_inter']) )
+        
+        singal_KIN_displacement_r.extend(  join_lists(td_rt_tmp['KIN_Right_UpLeg-Foot_dist_pre_inter'],td_rt_tmp['KIN_Right_UpLeg-Foot_dist_inter']) )
+        singal_KIN_displacement_l.extend(  join_lists(td_rt_tmp['KIN_Left_UpLeg-Foot_dist_pre_inter'],td_rt_tmp['KIN_Left_UpLeg-Foot_dist_inter']) )
         
         # EMG
         singal_EMG_lg_r.extend( join_lists(td_rt_tmp['EMG_RLG_pre_inter'],td_rt_tmp['EMG_RLG_inter']) )
@@ -1053,10 +1575,10 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
         # LFP highbeta
         singal_LFP_hb.extend( join_lists(td_rt_tmp[lfp_h_pre_name],td_rt_tmp[lfp_h_name]) )
     
-    col = col_scale(len(singal_KIN_foot))
-    col_r = col_scale(len(singal_KIN_foot),'r')
-    col_g = col_scale(len(singal_KIN_foot),'g')
-    col_b = col_scale(len(singal_KIN_foot),'b')
+    col = col_scale(len(singal_KIN_foot_r))
+    col_r = col_scale(len(singal_KIN_foot_r),'r')
+    col_g = col_scale(len(singal_KIN_foot_r),'g')
+    col_b = col_scale(len(singal_KIN_foot_r),'b')
     
     # LFP & EMGs
     fig, ax = plt.subplots(6,1)
@@ -1117,7 +1639,7 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
     ax[5].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
     
     plt.tight_layout()
-    fig.savefig('{}_{}_KIN_RIGHT.pdf'.format(path.join(td_lt_tmp['Folder'],td_lt_tmp['File']), lfp_h_name[0:19]), bbox_inches='tight')
+    fig.savefig('{}_{}_KIN_RIGHT.pdf'.format(path.join(td_rt_tmp['Folder'],td_rt_tmp['File'][:-6] + '_' + '_'.join(files)), lfp_h_name[0:19]), bbox_inches='tight')
     
     # LFP & KIN
     fig, ax = plt.subplots(6,1)
@@ -1173,12 +1695,307 @@ for lfp_l_name, lfp_h_name, lfp_l_pre_name, lfp_h_pre_name in zip(lfp_lb_name,lf
     m, dw2, up2 = confidence_interval(np.array(singal_KIN_foot_r).T)
     ax[5].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
     ax[5].plot(m, color='b', linewidth=2)
-    ax[5].set_title('LEFT ANG FOOT: k; RIGHT ANG FOOT: b')
+    ax[5].set_title('LEFT FOOT: k; RIGHT FOOT: b')
     ax[5].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
     ax[5].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
 
     plt.tight_layout()
-    fig.savefig('{}_{}_EMG_RIGHT.pdf'.format(path.join(td_lt_tmp['Folder'],td_lt_tmp['File']), lfp_h_name[0:19]), bbox_inches='tight')
+    fig.savefig('{}_{}_EMG_RIGHT.pdf'.format(path.join(td_rt_tmp['Folder'],td_rt_tmp['File'][:-6] + '_' + '_'.join(files)), lfp_h_name[0:19]), bbox_inches='tight')
+    
+    # LFP & KIN & EMG
+    fig, ax = plt.subplots(5,1)
+    plt.suptitle('RIGHT INIT: LFP & KIN & EMG')
+    
+    m, dw, up = confidence_interval(np.array(singal_LFP_hb).T)
+    ax[0].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+    ax[0].plot(m, color='r', linewidth=2)
+    ax[0].set_title(lfp_h_name)
+    ax[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    ax[0].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+    
+    m, dw, up = confidence_interval(np.array(singal_LFP_lb).T)
+    ax[1].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+    ax[1].plot(m, color='r', linewidth=2)
+    ax[1].set_title(lfp_l_name)
+    ax[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    ax[1].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+    
+    m, dw1, up1 = confidence_interval(np.array(singal_EMG_vl_l).T)
+    ax[2].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+    ax[2].plot(m, color='k', linewidth=2)
+    m, dw2, up2 = confidence_interval(np.array(singal_EMG_vl_r).T)
+    ax[2].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+    ax[2].plot(m, color='b', linewidth=2)
+    ax[2].set_title('EMG LVL : k; EMG RVL : b')
+    ax[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    ax[2].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+    
+    m, dw1, up1 = confidence_interval(np.array(singal_KIN_displacement_l).T)
+    ax[3].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+    ax[3].plot(m, color='k', linewidth=2)
+    m, dw2, up2 = confidence_interval(np.array(singal_KIN_displacement_r).T)
+    ax[3].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+    ax[3].plot(m, color='b', linewidth=2)
+    ax[3].set_title('DISP L : k; DISP R : b')
+    ax[3].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    ax[3].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+    
+    m, dw1, up1 = confidence_interval(np.array(singal_KIN_foot_l).T)
+    ax[4].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+    ax[4].plot(m, color='k', linewidth=2)
+    m, dw2, up2 = confidence_interval(np.array(singal_KIN_foot_r).T)
+    ax[4].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+    ax[4].plot(m, color='b', linewidth=2)
+    ax[4].set_title('LEFT FOOT: k; RIGHT FOOT: b')
+    ax[4].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+    ax[4].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+    plt.tight_layout()
+    fig.savefig('{}_{}_EMG_KIN_RIGHT.pdf'.format(path.join(td_rt_tmp['Folder'],td_rt_tmp['File'][:-6] + '_' + '_'.join(files)), lfp_h_name[0:19]), bbox_inches='tight')
+    
+#%% One plot
+    
+el = 2
+lfp_l_name = lfp_lb_name[el]
+lfp_h_name = lfp_hb_name[el]
+lfp_l_pre_name = lfp_lb_pre_name[el]
+lfp_h_pre_name = lfp_hb_pre_name[el]
+
+# break
+singal_KIN_foot_r  = []
+singal_KIN_arm_r   = []
+singal_KIN_trunk_r = []
+singal_KIN_leg_r   = []
+singal_KIN_foot_l  = []
+singal_KIN_arm_l   = []
+singal_KIN_trunk_l = []
+singal_KIN_leg_l   = []
+
+singal_KIN_displacement_r = []
+singal_KIN_displacement_l = []
+
+singal_EMG_lg_r = []
+singal_EMG_vl_r = []
+singal_EMG_ta_r = []
+singal_EMG_rf_r = []
+singal_EMG_lg_l = []
+singal_EMG_vl_l = []
+singal_EMG_ta_l = []
+singal_EMG_rf_l = []
+
+singal_LFP_lb = []
+singal_LFP_hb = []
+
+files = []
+
+for td_rt_tmp in td_rt:
+    # break
+    files.append(td_rt_tmp['File'][-5:-4])
+    # KIN
+    singal_KIN_foot_r.extend( join_lists(td_rt_tmp['KIN_RightFoot_P_y_pre_inter'],td_rt_tmp['KIN_RightFoot_P_y_inter']) )
+    singal_KIN_arm_r.extend(  join_lists(td_rt_tmp['KIN_angle_arm_right_pre_inter'],td_rt_tmp['KIN_angle_arm_right_inter']) )
+    singal_KIN_trunk_r.extend(join_lists(td_rt_tmp['KIN_angle_trunk_right_pre_inter'],td_rt_tmp['KIN_angle_trunk_right_inter']) )
+    singal_KIN_leg_r.extend(  join_lists(td_rt_tmp['KIN_angle_leg_right_pre_inter'],td_rt_tmp['KIN_angle_leg_right_inter']) )
+    
+    singal_KIN_foot_l.extend( join_lists(td_rt_tmp['KIN_LeftFoot_P_y_pre_inter'],td_rt_tmp['KIN_LeftFoot_P_y_inter']) )
+    singal_KIN_arm_l.extend(  join_lists(td_rt_tmp['KIN_angle_arm_left_pre_inter'],td_rt_tmp['KIN_angle_arm_left_inter']) )
+    singal_KIN_trunk_l.extend(join_lists(td_rt_tmp['KIN_angle_trunk_left_pre_inter'],td_rt_tmp['KIN_angle_trunk_left_inter']) )
+    singal_KIN_leg_l.extend(  join_lists(td_rt_tmp['KIN_angle_leg_left_pre_inter'],td_rt_tmp['KIN_angle_leg_left_inter']) )
+    
+    singal_KIN_displacement_r.extend(  join_lists(td_rt_tmp['KIN_Right_UpLeg-Foot_dist_pre_inter'],td_rt_tmp['KIN_Right_UpLeg-Foot_dist_inter']) )
+    singal_KIN_displacement_l.extend(  join_lists(td_rt_tmp['KIN_Left_UpLeg-Foot_dist_pre_inter'],td_rt_tmp['KIN_Left_UpLeg-Foot_dist_inter']) )
+    
+    # EMG
+    singal_EMG_lg_r.extend( join_lists(td_rt_tmp['EMG_RLG_pre_inter'],td_rt_tmp['EMG_RLG_inter']) )
+    singal_EMG_vl_r.extend( join_lists(td_rt_tmp['EMG_RVL_pre_inter'],td_rt_tmp['EMG_RVL_inter']) )
+    singal_EMG_ta_r.extend( join_lists(td_rt_tmp['EMG_RTA_pre_inter'],td_rt_tmp['EMG_RTA_inter']) )
+    singal_EMG_rf_r.extend( join_lists(td_rt_tmp['EMG_RRF_pre_inter'],td_rt_tmp['EMG_RRF_inter']) )
+    
+    singal_EMG_lg_l.extend( join_lists(td_rt_tmp['EMG_LLG_pre_inter'],td_rt_tmp['EMG_LLG_inter']) )
+    singal_EMG_vl_l.extend( join_lists(td_rt_tmp['EMG_LVL_pre_inter'],td_rt_tmp['EMG_LVL_inter']) )
+    singal_EMG_ta_l.extend( join_lists(td_rt_tmp['EMG_LTA_pre_inter'],td_rt_tmp['EMG_LTA_inter']) )
+    singal_EMG_rf_l.extend( join_lists(td_rt_tmp['EMG_LRF_pre_inter'],td_rt_tmp['EMG_LRF_inter']) )
+    
+    # LFP lowbeta
+    singal_LFP_lb.extend( join_lists(td_rt_tmp[lfp_l_pre_name],td_rt_tmp[lfp_l_name]) )
+    
+    # LFP highbeta
+    singal_LFP_hb.extend( join_lists(td_rt_tmp[lfp_h_pre_name],td_rt_tmp[lfp_h_name]) )
+
+col = col_scale(len(singal_KIN_foot_r))
+col_r = col_scale(len(singal_KIN_foot_r),'r')
+col_g = col_scale(len(singal_KIN_foot_r),'g')
+col_b = col_scale(len(singal_KIN_foot_r),'b')
+
+# LFP & EMGs
+fig, ax = plt.subplots(6,1)
+plt.suptitle('RIGHT INIT: LFP & EMGs')
+
+m, dw, up = confidence_interval(np.array(singal_LFP_hb).T)
+ax[0].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+ax[0].plot(m, color='r', linewidth=2)
+ax[0].set_title(lfp_h_name)
+ax[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[0].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+
+m, dw, up = confidence_interval(np.array(singal_LFP_lb).T)
+ax[1].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+ax[1].plot(m, color='r', linewidth=2)
+ax[1].set_title(lfp_l_name)
+ax[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[1].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+
+m, dw1, up1 = confidence_interval(np.array(singal_EMG_vl_l).T)
+ax[2].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+ax[2].plot(m, color='k', linewidth=2)
+m, dw2, up2 = confidence_interval(np.array(singal_EMG_vl_r).T)
+ax[2].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+ax[2].plot(m, color='b', linewidth=2)
+ax[2].set_title('EMG LVL : k; EMG RVL : b')
+ax[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[2].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+m, dw1, up1 = confidence_interval(np.array(singal_EMG_rf_l).T)
+ax[3].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+ax[3].plot(m, color='k', linewidth=2)
+m, dw2, up2 = confidence_interval(np.array(singal_EMG_rf_r).T)
+ax[3].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+ax[3].plot(m, color='b', linewidth=2)
+ax[3].set_title('EMG LRF : k; EMG RRF : b')
+ax[3].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[3].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+m, dw1, up1 = confidence_interval(np.array(singal_EMG_lg_l).T)
+ax[4].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+ax[4].plot(m, color='k', linewidth=2)
+m, dw2, up2 = confidence_interval(np.array(singal_EMG_lg_r).T)
+ax[4].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+ax[4].plot(m, color='b', linewidth=2)
+ax[4].set_title('EMG LLG : k; EMG RLG : b')
+ax[4].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[4].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+m, dw1, up1 = confidence_interval(np.array(singal_EMG_ta_l).T)
+ax[5].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+ax[5].plot(m, color='k', linewidth=2)
+m, dw2, up2 = confidence_interval(np.array(singal_EMG_ta_r).T)
+ax[5].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+ax[5].plot(m, color='b', linewidth=2)
+ax[5].set_title('EMG LTA : k; EMG RTA : b')
+ax[5].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[5].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+plt.tight_layout()
+
+# LFP & KIN
+fig, ax = plt.subplots(6,1)
+plt.suptitle('RIGHT INIT: LFP & KIN')
+
+m, dw, up = confidence_interval(np.array(singal_LFP_hb).T)
+ax[0].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+ax[0].plot(m, color='r', linewidth=2)
+ax[0].set_title(lfp_h_name)
+ax[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[0].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+
+m, dw, up = confidence_interval(np.array(singal_LFP_lb).T)
+ax[1].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+ax[1].plot(m, color='r', linewidth=2)
+ax[1].set_title(lfp_l_name)
+ax[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[1].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+
+m, dw1, up1 = confidence_interval(np.array(singal_KIN_arm_l).T)
+ax[2].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+ax[2].plot(m, color='k', linewidth=2)
+m, dw2, up2 = confidence_interval(np.array(singal_KIN_arm_r).T)
+ax[2].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+ax[2].plot(m, color='b', linewidth=2)
+ax[2].set_title('LEFT ANG ARM: k; RIGHT ANG ARM: b')
+ax[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[2].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+m, dw1, up1 = confidence_interval(np.array(singal_KIN_trunk_l).T)
+ax[3].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+ax[3].plot(m, color='k', linewidth=2)
+m, dw2, up2 = confidence_interval(np.array(singal_KIN_trunk_r).T)
+ax[3].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+ax[3].plot(m, color='b', linewidth=2)
+ax[3].set_title('LEFT ANG TRUNK: k; RIGHT ANG TRUNK: b')
+ax[3].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[3].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+m, dw1, up1 = confidence_interval(np.array(singal_KIN_leg_l).T)
+ax[4].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+ax[4].plot(m, color='k', linewidth=2)
+m, dw2, up2 = confidence_interval(np.array(singal_KIN_leg_r).T)
+ax[4].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+ax[4].plot(m, color='b', linewidth=2)
+ax[4].set_title('LEFT ANG LEG: k; RIGHT ANG LEG: b')
+ax[4].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[4].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+m, dw1, up1 = confidence_interval(np.array(singal_KIN_foot_l).T)
+ax[5].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+ax[5].plot(m, color='k', linewidth=2)
+m, dw2, up2 = confidence_interval(np.array(singal_KIN_foot_r).T)
+ax[5].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+ax[5].plot(m, color='b', linewidth=2)
+ax[5].set_title('LEFT FOOT: k; RIGHT FOOT: b')
+ax[5].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[5].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+plt.tight_layout()
+
+# LFP & KIN & EMG
+fig, ax = plt.subplots(5,1)
+plt.suptitle('RIGHT INIT: LFP & KIN & EMG')
+
+m, dw, up = confidence_interval(np.array(singal_LFP_hb).T)
+ax[0].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+ax[0].plot(m, color='r', linewidth=2)
+ax[0].set_title(lfp_h_name)
+ax[0].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[0].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+
+m, dw, up = confidence_interval(np.array(singal_LFP_lb).T)
+ax[1].fill_between(np.arange(m.shape[0]),dw, up, alpha=0.1,color="r")
+ax[1].plot(m, color='r', linewidth=2)
+ax[1].set_title(lfp_l_name)
+ax[1].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[1].vlines(td_interval_rt['LFP_pre'],dw.min(),up.max(),'k')
+
+m, dw1, up1 = confidence_interval(np.array(singal_EMG_vl_l).T)
+ax[2].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+ax[2].plot(m, color='k', linewidth=2)
+m, dw2, up2 = confidence_interval(np.array(singal_EMG_vl_r).T)
+ax[2].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+ax[2].plot(m, color='b', linewidth=2)
+ax[2].set_title('EMG LVL : k; EMG RVL : b')
+ax[2].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[2].vlines(td_interval_rt['EMG_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+m, dw1, up1 = confidence_interval(np.array(singal_KIN_displacement_l).T)
+ax[3].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+ax[3].plot(m, color='k', linewidth=2)
+m, dw2, up2 = confidence_interval(np.array(singal_KIN_displacement_r).T)
+ax[3].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+ax[3].plot(m, color='b', linewidth=2)
+ax[3].set_title('DISP L : k; DISP R : b')
+ax[3].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[3].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+m, dw1, up1 = confidence_interval(np.array(singal_KIN_foot_l).T)
+ax[4].fill_between(np.arange(m.shape[0]),dw1, up1, alpha=0.1,color="k")
+ax[4].plot(m, color='k', linewidth=2)
+m, dw2, up2 = confidence_interval(np.array(singal_KIN_foot_r).T)
+ax[4].fill_between(np.arange(m.shape[0]),dw2, up2, alpha=0.1,color="b")
+ax[4].plot(m, color='b', linewidth=2)
+ax[4].set_title('LEFT FOOT: k; RIGHT FOOT: b')
+ax[4].tick_params(axis='x', which='both', bottom=False, top=False, labelbottom=False)
+ax[4].vlines(td_interval_rt['KIN_pre'],min([dw1.min(),dw1.min()]),max([up1.max(),up2.max()]),'k')
+
+plt.tight_layout()
 
 
 # EOF

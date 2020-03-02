@@ -6,6 +6,17 @@ Created on Thu Jan 16 16:29:48 2020
 @author: raschell
 """
 
+'''
+td is the trial data structure.
+The format of td is as following:
+    NAME keys : contain signals
+    PARAMS key : contain trial data information
+        signals : name of the signals to be used for analysis
+        time : name of the signal containing time information
+        Fs : sampling frequency
+
+'''
+
 # Plot library
 import matplotlib.pyplot as plt
 # Enumerator library
@@ -13,7 +24,7 @@ from enum import Enum
 # Numpy library
 import numpy as np
 # Processing
-from processing import artefacts_removal, convert_points_to_target_vector
+from processing import artefacts_removal, convert_points_to_target_vector, get_epochs
 # Import loading functions
 from loading_data import load_data_from_folder
 
@@ -28,7 +39,50 @@ class event_linestyle(Enum):
     R = '-'
     L = '--'
 
-def identify_artefacts(_td, _fields, _Fs, **kwargs):
+def segment_data(_td, td_epoch):
+    '''
+    This function segments the trial data in several blocks
+
+    Parameters
+    ----------
+    _td : dict / list of dict
+        Trial data.
+    td_epoch : dict / list of dict
+
+    Returns
+    -------
+    td_out : dict / list of dict
+        Trial data.
+
+    '''
+    td_out = []
+    
+    td = _td.copy()
+    
+    # check dict input variable
+    if type(td) is dict:
+        td = [td]
+    
+    if len(td) != len(td_epoch):
+        raise Exception('ERROR: td and td_segment must have the same length!')
+    
+    for td_tmp, td_epo in zip(td, td_epoch):
+        epochs = get_epochs(td_epo['epochs'], td_tmp['params']['Fs'])
+        for epoch in epochs:
+            td_out_tmp = td_tmp.copy()
+            for k,v in td_out_tmp.items():
+                break
+                if k != 'params':
+                    td_out_tmp[k] = np.array(v)[epoch]
+                elif 'time' in k:
+                    td_out_tmp[k] = np.array(v)[epoch] - np.array(v)[epoch][0]
+            # Append new dict
+            td_out.append(td_out_tmp)
+    
+    return td_out
+
+
+def identify_artefacts(_td, **kwargs):
     '''
     This function identifies the artefacts in the trial data dict(s)
 
@@ -36,9 +90,9 @@ def identify_artefacts(_td, _fields, _Fs, **kwargs):
     ----------
     _td : dict / list of dict
         Trial data.
-    _fields : list of str
+    fields : list of str
         Fields over which finding the artefacts
-    _Fs : int
+    Fs : int
         Sample frequency of the signals
     method : str, optional
         Method for removing the artefacts. The default is amplitude.
@@ -55,9 +109,17 @@ def identify_artefacts(_td, _fields, _Fs, **kwargs):
     method = None
     signal_n = None
     threshold = None
+    fields = None
+    Fs = None
     
     # Check input variables
     for key,value in kwargs.items():
+        if key == 'fields':
+            fields = value
+        if key == 'Fs':
+            Fs = value
+        if key == 'method':
+            method = value
         if key == 'method':
             method = value
         if key == 'signal_n':
@@ -76,24 +138,30 @@ def identify_artefacts(_td, _fields, _Fs, **kwargs):
         raise Exception('ERROR: _td must be a list of dictionaries!')
     
     # check string input variable
-    if type(_fields) is str:
-        _fields = [_fields]
-        
-    if type(_fields) is not list:
-        raise Exception('ERROR: _str must be a list of strings!')
+    if fields != None:
+        if type(fields) is str:
+            fields = [fields]
+        if type(fields) is not list:
+            raise Exception('ERROR: _str must be a list of strings!')
+        if signal_n == None:
+            print('Number of signals with artefacts not specified. Setting to len(fields)-1 ...')
+            signal_n = len(fields)-1
         
     if method == None:
         method = 'amplitude'
         print('Method for removing artifacts not specified: Selectd method is {}'.format(method))
         
-    if signal_n == None:
-        print('Number of signals with artefacts not specified. Setting to len(_fields)-1 ...')
-        signal_n = len(_fields)-1
-        
     td_artefacts = []
     for td_tmp in td:
-        data = group_fields(td_tmp,_fields)
-        td_artefacts.append({'good_idx':artefacts_removal(data, _Fs, method, signal_n, threshold)})
+        if fields == None:
+            fields = td_tmp['params']['signals']
+            if signal_n == None:
+                signal_n = len(fields)-1
+        if Fs == None:
+            Fs = td_tmp['params']['Fs']
+        
+        data = group_fields(td_tmp,fields)
+        td_artefacts.append({'epochs':artefacts_removal(data, Fs, method, signal_n, threshold)})
     
     return td_artefacts
 
@@ -112,7 +180,7 @@ def combine_fields(_td, _fields, **kwargs):
     remove_selected_fields : bool, optional
         Remove the fields before returning the dataset. The default is True.
     inplace : bool, optional
-        Perfrom operation on the input data dict. The default is False.
+        Perform operation on the input data dict. The default is False.
 
     Returns
     -------
@@ -123,6 +191,7 @@ def combine_fields(_td, _fields, **kwargs):
 
     method = 'subtract'
     remove_selected_fields = True
+    save_name_to_params = False
     inplace = False
 
     # Check input variables
@@ -131,6 +200,8 @@ def combine_fields(_td, _fields, **kwargs):
             method = value
         elif key == 'remove_selected_fields':
             remove_selected_fields = value
+        elif key == 'save_name_to_params':
+            save_name_to_params = value
         elif key == 'inplace':
             inplace = value
 
@@ -163,6 +234,7 @@ def combine_fields(_td, _fields, **kwargs):
         raise Exception('ERROR: specified method has not been implemented!')
     
     for td_tmp in td:
+        signals_name = []
         for field in _fields:
             if len(field[0]) != len(field[1]):
                 raise Exception('ERROR: the 2 arrays must have the same length!')
@@ -177,9 +249,13 @@ def combine_fields(_td, _fields, **kwargs):
                 raise Exception('Method must be implemented!')
             elif method == 'divide':
                 raise Exception('Method must be implemented!')
-          
+            signals_name.append(signal_name)
+            
+        if save_name_to_params:
+            td_tmp['params']['signals'] = signals_name
+    
     if remove_selected_fields:
-        remove_fields(td,flatten_list(_fields), exact_field = True)
+        remove_fields(td,flatten_list(_fields), exact_field = True, inplace = inplace)
     
     if input_dict:
         td = td[0]
@@ -203,7 +279,7 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_s
     remove_selected_fields : bool, optional
         Remove the fields before returning the dataset. The default is True.
     inplace : bool, optional
-        Perfrom operation on the input data dict. The default is False.
+        Perform operation on the input data dict. The default is False.
 
     Returns
     -------
@@ -268,7 +344,7 @@ def combine_dicts(_td1, _td2, inplace = False):
     _td2 : dict/list of dict
         dict of the trial data
     inplace : string, optional
-        Perfrom operation on the input data dict. The default is False.
+        Perform operation on the input data dict. The default is False.
 
     Returns
     -------
@@ -321,7 +397,7 @@ def remove_fields(_td, _field, exact_field = False, inplace = False):
     exact_field : bool, optional
         Look for the exact field name in the dict. The default is False.
     inplace : bool, optional
-        Perfrom operaiton on the input data dict. The default is False.
+        Perform operaiton on the input data dict. The default is False.
 
     Returns
     -------
@@ -387,7 +463,7 @@ def remove_all_fields_but(_td, _field, exact_field = False, inplace = False):
     exact_field : bool, optional
         Look for the exact field name in the dict. The default is False.
     inplace : bool, optional
-        Perfrom operaiton on the input data dict. The default is False.
+        Perform operaiton on the input data dict. The default is False.
 
     Returns
     -------
@@ -440,9 +516,9 @@ def remove_all_fields_but(_td, _field, exact_field = False, inplace = False):
         return td
 
 
-def add_field(_td, _dict, inplace = False, verbose = False):
+def add_field_from_dict(_td, _dict, inplace = False, verbose = False):
     '''
-    This function adds fields to a dict.
+    This function adds fields in a dict to another dict.
     
     Parameters
     ----------
@@ -451,7 +527,7 @@ def add_field(_td, _dict, inplace = False, verbose = False):
     _dict : dict
         dict to add to trial data
     inplace : str, optional
-        Perfrom operation on the input data dict. The default is False.
+        Perform operation on the input data dict. The default is False.
     verbose : bool, optional
         Describe what's happening in the code. The default is False.
 
@@ -565,8 +641,8 @@ def get_field(_td, _signals, save_signals_name = False):
     '''
     td = _td.copy()
     td_out = []
-    input_dict = False
     
+    input_dict = False
     if type(td) == dict:
         input_dict = True
         td = [td]
@@ -609,20 +685,29 @@ def get_field(_td, _signals, save_signals_name = False):
 def td_plot(_td, _signals, **kwargs):
     '''
     This function plots signals from the td dict.
-    
-    This function plots signals from the td dictionary
-    Input:
-        _td: dict of trial data
-        _signals: list of str or str with the signals to plot
-        subplot: tuple with the size of the given signals
-        gait_events: list of str or str with the gait_events to plot
-        title: str with title of the plot
-        ylim: tuple with y min and max
-        xlim: tuple with x min and max
-        save: bool for saving the figure
-    
+
+    Parameters
+    ----------
+    _td : dict
+        Trial data.
+    _signals : str/list of str
+        Signals to plot.
+    subplot : tuple
+        Structure of the suvplots in the figure.
+    gait_events : str/list of str
+        Gait events to plot.
+    title : str
+        Title of the plot.
+    xlim : tuple
+        x min and max.
+    ylim : tuple
+        y min and max.
+    save : bool
+        Flag for saving the figure.
+
     Example:
         td_plot(td,['LFP_BIP7','LFP_BIP9'], gait_events = ['RFS','LFS'], subplot = (2,1))
+
     '''
     
     # Input variables
@@ -728,6 +813,50 @@ def td_plot(_td, _signals, **kwargs):
                 for ev in _td[event]:
                     ax.axvline(ev,ylim[0], ylim[1], color = col, linestyle = line_style)
 
+def add_params(td, **kwargs):
+    '''
+    This function adds parameters to the trial data dictionary
+
+    Parameters
+    ----------
+    td : dict / list of dict
+        dict of trial data.
+    **kwargs : 
+        items to add to the td dict
+        
+    Returns
+    -------
+    td : dict / list of dict.
+        dict of trial data.
+    '''
+    
+    input_dict = False
+    if type(td) == dict:
+        input_dict = True
+        td = [td]
+        
+    # Loop over the trials
+    for td_tmp in td:
+        td_tmp['params'] = {}
+        # Check input variables
+        for key,value in kwargs.items():
+            td_tmp['params'][key] = value
+
+    if input_dict:
+        td = td[0]
+        
+    return td
+
+def combine_epochs(td_1, td_2):
+    td_epoch = []
+    if len(td_1) != len(td_2):
+        raise Exception('ERROR: artefacts and segments trials data have different length!')
+    for art, seg in zip(td_1, td_2):
+        if len(art['epochs']) != len(seg['epochs']):
+            raise Exception('ERROR: artefacts[epochs] and segments [epochs] have different length!')
+        td_epoch.append({'epochs': np.logical_and(np.array(art['epochs']), np.array(seg['epochs'])).astype('int')})
+    
+    return td_epoch
 
 def load_pipeline(data_path, data_files, data_format, **kwargs):
     '''
@@ -754,6 +883,7 @@ def load_pipeline(data_path, data_files, data_format, **kwargs):
     remove_fields_dict = None
     remove_all_fields_but_dict = None
     convert_fields_to_numeric_array_dict = None
+    params = None
     
     # Check input variables
     for key,value in kwargs.items():
@@ -765,6 +895,9 @@ def load_pipeline(data_path, data_files, data_format, **kwargs):
             remove_all_fields_but_dict = value
         elif key == 'convert_fields_to_numeric_array':
             convert_fields_to_numeric_array_dict = value
+        elif key == 'params':
+            params = value
+            
     
     # Load data
     td = load_data_from_folder(folder = data_path,file_num = data_files,file_format = data_format)
@@ -791,6 +924,10 @@ def load_pipeline(data_path, data_files, data_format, **kwargs):
         convert_fields_to_numeric_array(td, _fields = convert_fields_to_numeric_array_dict['fields'], 
                                         _vector_target_field = convert_fields_to_numeric_array_dict['target_vector'],
                                         remove_selected_fields = True, inplace = True)    
+    
+    if params != None:
+        add_params(td, **params)
+    
     return td
     
 
@@ -818,7 +955,7 @@ def cleaning_pipeline(td, **kwargs):
     # Input variables
     combine_fields_dict = None
     remove_artefacts_dict = None
-    segment_data_dict = None
+    add_segmentation_dict = None
     
     # Check input variables
     for key,value in kwargs.items():
@@ -826,32 +963,36 @@ def cleaning_pipeline(td, **kwargs):
             combine_fields_dict = value
         elif key == 'remove_artefacts':
             remove_artefacts_dict = value
-        elif key == 'segment_data':
-            segment_data_dict = value
+        elif key == 'add_segmentation':
+            add_segmentation_dict = value
     
     # check dict input variable
-    input_dict = False
     if type(td) is dict:
-        input_dict = True
         td = [td]
         
     if type(td) is not list:
         raise Exception('ERROR: _td must be a list of dictionaries!')
     
     if combine_fields_dict != None:
-        options = remove_fields(combine_fields_dict, ['fields'], exact_field = False, inplace = False)
-        combine_fields(td, combine_fields_dict['fields'], **options)
-    
-    if remove_artefacts_dict != None:
-        options = remove_fields(remove_artefacts_dict, ['fields','Fs'], exact_field = False, inplace = False)
-        td_segment = identify_artefacts(td, remove_artefacts_dict['fields'], remove_artefacts_dict['Fs'], **options)
-    
-    if combine_fields_dict != None:
-        pass
-    
-    if input_dict:
-        td = td[0]
+        combine_fields(td, combine_fields_dict['fields'], **combine_fields_dict)
         
+    if remove_artefacts_dict != None:
+        td_artefacts = identify_artefacts(td, **remove_artefacts_dict)
+        
+    if add_segmentation_dict != None:
+        td_segment = add_segmentation_dict['epochs']
+    
+    # Combine artefacts and segmentation
+    if remove_artefacts_dict != None and add_segmentation_dict != None:
+        td_epoch = combine_epochs(td_artefacts, td_segment)
+    elif remove_artefacts_dict == None and add_segmentation_dict != None:
+        td_epoch = td_segment
+    elif remove_artefacts_dict != None and add_segmentation_dict == None:
+        td_epoch = td_artefacts
+    
+    if remove_artefacts_dict != None or add_segmentation_dict != None:
+        td = segment_data(td, td_epoch)
+    
     return td
 
 
@@ -913,11 +1054,11 @@ if __name__ == '__main__':
         raise Exception('ERROR: Test get_field NOT passed!')
         
     # Test add_fields
-    td_new = add_field(td_test,{'test3': [1,3,4]}, inplace = False)
+    td_new = add_field_from_dict(td_test,{'test3': [1,3,4]}, inplace = False)
     if 'test3' in td_new.keys():
-        print('Test add_field passed!')
+        print('Test add_field_from_dict passed!')
     else:
-        raise Exception('ERROR: Test add_field NOT passed!')
+        raise Exception('ERROR: Test add_field_from_dict NOT passed!')
     
     # Test convert_fields_to_numeric_array
     td_test_cf2n = {'test1': np.arange(10), 'id1': [1,3,5], 'id2': [2,4]}
@@ -944,7 +1085,8 @@ if __name__ == '__main__':
         raise Exception('ERROR: Test combine_fields NOT passed!')
         
         
-        
+    
+    del td_test, td_test2, td_test_list, td_comb, td_res, td_new, td_test_cf2n, td_new1, td_new2, td_test_combine
     print('All implemented tests passed!')
     
     

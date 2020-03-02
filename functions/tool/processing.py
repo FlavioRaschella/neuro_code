@@ -9,6 +9,39 @@ Created on Tue Feb 18 15:07:29 2020
 import numpy as np
 import matplotlib.pyplot as plt
 
+def get_epochs(binary_array, Fs, verbose = False):
+    
+    if binary_array.ndim > 1:
+        raise Exception('ERROR: Input array has more that 1 dimension!')
+    
+    signal_len = binary_array.shape[0]
+    
+    # Separate dataset in good epochs
+    good_start = np.where(np.logical_and(binary_array[:-1]==False ,binary_array[1:]==True))
+    if binary_array[0] == 1:
+        good_start = np.insert(good_start,0,0)
+        
+    good_stop = np.where(np.logical_and(binary_array[:-1]==True ,binary_array[1:]==False))
+    if binary_array[-1] == 1:
+        good_stop = np.append(good_stop,signal_len)
+    
+    # Check that good_start and good_stop have same length
+    if len(good_start) != len(good_stop):
+        raise Exception('Start and Stop epochs have different length!')
+    
+    good_epoch = np.where((good_stop - good_start + 1) > 2*Fs)
+    good_start = good_start[good_epoch]
+    good_stop = good_stop[good_epoch]
+    if verbose:
+        print('Start: {}; Stop: {}'.format(good_start, good_stop))
+    
+    epochs = []
+    for epoch_start, epoch_end in zip(good_start, good_stop):
+        epochs.append(np.arange(epoch_start, epoch_end))
+    
+    return epochs
+
+
 def artefacts_removal(data, Fs, method = 'amplitude', n = 1, threshold = None):
     '''
     Parameters
