@@ -34,9 +34,8 @@ td = cleaning_pipeline(td,**CLEANING_OPT)
 
 #%% PREPROCESS DATA
 
-FILTERS = {}
-PREPROCESS_OPT = {'': {'': ,'': ''},
-                  '': {'': ,'': ''}}
+PREPROCESS_OPT = {'filter': {'type': 'bandpass', 'fmin' : 1, 'fmax': 50},
+                  'multitaper': {'wind_size': 0.25,'wind_step': 0.01, 'freq_start': 10, 'freq_stop': 100, 'NW': 4}}
 
 td = preprocess_pipeline(td,**PREPROCESS_OPT)
 

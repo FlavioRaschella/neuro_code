@@ -30,6 +30,8 @@ from loading_data import load_data_from_folder
 
 from utils import bipolar, add, flatten_list, group_fields
 
+from power_estimation import moving_pmtm
+
 # Plotting events characteristics
 class event_color(Enum):
     FS = 'r'
@@ -80,7 +82,6 @@ def segment_data(_td, td_epoch):
             td_out.append(td_out_tmp)
     
     return td_out
-
 
 def identify_artefacts(_td, **kwargs):
     '''
@@ -848,6 +849,22 @@ def add_params(td, **kwargs):
     return td
 
 def combine_epochs(td_1, td_2):
+    '''
+    This function combines the good epochs from 2 dict using the logic AND.
+
+    Parameters
+    ----------
+    td_1 : dict / list of dict
+        trial data with epoch field.
+    td_2 : dict / list of dict
+        trial data with epoch field.
+
+    Returns
+    -------
+    td_epoch : dict / list of dict
+        Dict aving as only field 'epochs', a binary array.
+
+    '''
     td_epoch = []
     if len(td_1) != len(td_2):
         raise Exception('ERROR: artefacts and segments trials data have different length!')
@@ -857,6 +874,91 @@ def combine_epochs(td_1, td_2):
         td_epoch.append({'epochs': np.logical_and(np.array(art['epochs']), np.array(seg['epochs'])).astype('int')})
     
     return td_epoch
+
+def compute_multitaper(_td, **kwargs):
+    
+    # Multitaper information
+    window_size_sec = 0.25 # in seconds
+    window_step_sec = 0.01 # in seconds
+    freq_min = 10
+    freq_max = 100
+    NW = 4
+    inplace = False
+    verbose = False
+
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'wind_size':
+            window_size_sec = value
+        elif key == 'wind_step':
+            window_step_sec = value
+        elif key == 'freq_start':
+            freq_min = value
+        elif key == 'freq_stop':
+            freq_max = value
+        elif key == 'NW':
+            NW = value
+        elif key == 'inplace':
+            inplace = value
+    
+    if inplace:
+        td = _td
+    else:
+        td = _td.copy()
+    
+    input_dict = False
+    # check dict input variable
+    if type(td) is dict:
+        input_dict = True
+        td = [td]
+        
+    if type(td) is not list:
+        raise Exception('ERROR: _td must be a list of dictionaries!')
+        
+    # Compute number of tapers
+    tapers_n = np.floor(2*NW)-1
+    # Get frequency range
+    freq_range = [freq_min , freq_max]
+    
+    for td_tmp in td:
+        Fs = td_tmp['params']['Fs']
+        
+        # Get window's info in samples
+        window_size_smp = round(window_size_sec * Fs)
+        window_step_smp = round(window_step_sec * Fs)
+        
+        for iSgl, signal in enumerate(td_tmp['params']['signals']):
+            if verbose:
+                print('Processing signal {}/{}'.format(iSgl+1, len(td_tmp['signal_names'])))
+            td_tmp[signal], sfreqs, stimes = moving_pmtm(td_tmp[signal], Fs, window_size_smp, window_step_smp, freq_range, NW=NW, NFFT=None, verbose=verbose)
+        
+        # Update frequency info
+        td_tmp['params']['Fs'] = 1/(stimes[1] - stimes[0])
+        
+        # Re-map target dataset
+        if 'target' in set(td_tmp.keys()):
+            target_new = np.zeros(stimes.shape)
+            for ev in np.unique(td_tmp['target'])[1:]:
+                target_new += np.histogram(np.where(td_tmp['target'] == ev), bins = stimes.shape[0], range = (0, len(td_tmp['target'])))[0]
+            if (target_new > np.unique(td_tmp['target'])[-1]).any():
+                raise Exception('WARNING: Multiple classes are falling in the mutitaping binning!')
+            td_tmp['target'] = target_new
+            
+        td_tmp[td_tmp['params']['time']] = stimes
+        td_tmp['params']['freq'] = 'freq'
+        td_tmp['freq'] = sfreqs
+    
+    if input_dict:
+        td = td[0]
+    
+    if not inplace:
+        return td
+
+
+def compute_filter(_td, **kwargs):
+    pass
+    
+    # return td
 
 def load_pipeline(data_path, data_files, data_format, **kwargs):
     '''
@@ -997,35 +1099,42 @@ def cleaning_pipeline(td, **kwargs):
 
 
 def preprocess_pipeline(td, **kwargs):
+    '''
+    This function preprocess the dataset.
+
+    Parameters
+    ----------
+    td : dict / list of dict
+        Trial data.
+    **kwargs : dict
+        Additional information for organising the data
+
+    Returns
+    -------
+    td : dict / list of dict
+        Trial data organised based on input requests.
+
+    '''
+    
     pass
-    # # Input variables
-    # signals_to_use = None
-    # filters_to_use = None
+    # Input variables
+    filter_dict = None
+    multitaper_dict = None
     
-    # # Check input variables
-    # for key,value in kwargs.items():
-    #     if key == 'signals':
-    #         signals_to_use = value
-    #     elif key == 'filters':
-    #         filters_to_use = value
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'filter':
+            filter_dict = value
+        elif key == 'multitaper':
+            multitaper_dict = value
     
-    # # Get selected signals
-    # td = get_field(td,signals_to_use)
+    if filter_dict != None:
+        pass
     
-    # for td_tmp in td:
-        
-    #     # Artefacts removal
-    #     artefacts_removal(data, threshold = 300)
+    if multitaper_dict != None:
+        pass
     
-    #     # Remove unwanted parts
-    
-    
-    #     # Data processing
-    
-    
-    # return td
-
-
+    return td
 
 
 if __name__ == '__main__':

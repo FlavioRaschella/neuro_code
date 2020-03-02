@@ -19,14 +19,14 @@ def process_spectrogram_params(Fs, window_start, window_size_smp, freq_range, NF
     
     # set the NFFT
     if NFFT==None:
-        NFFT = max(256, 2**nextpow2(window_size_smp))
+        NFFT = np.max([256, 2**nextpow2(window_size_smp)])
     
-    # frequency
+    # Frequency info
     df = Fs/NFFT;
     sfreqs = np.arange(0,Fs,df) # all possible frequencies
     freq_idx = np.where(np.logical_and(sfreqs>=freq_range[0],sfreqs<=freq_range[1]))[0]
     sfreqs = sfreqs[freq_idx]
-    # time
+    # Time info
     window_middle_times = window_start + round(window_size_smp/2);
     stimes = window_middle_times/Fs;
     
@@ -86,12 +86,14 @@ def pmtm(data, Fs, NW=None, NFFT=None, v=None):
 
 def moving_pmtm(data, Fs, win_size, win_step, freq_range, NW=None, NFFT=None, verbose=False):
     
+    if type(data) is list:
+        data = np.array(data)
+    
     N = np.max(data.shape)
     win_start = np.arange(0,N-win_size,win_step)
     
     # Compute pmtm features
-    df, sfreqs, stimes, freq_idx = process_spectrogram_params(Fs, NFFT, win_start, win_size,freq_range)
-    
+    df, sfreqs, stimes, freq_idx = process_spectrogram_params(Fs, win_start, win_size, freq_range, NFFT)
     tapers = dpss(M = win_size, NW = NW, Kmax = NW*2).T*math.sqrt(Fs)
     tapers_n = np.min(tapers.shape)
     
