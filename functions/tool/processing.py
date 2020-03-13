@@ -8,6 +8,7 @@ Created on Tue Feb 18 15:07:29 2020
 
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy import interpolate
 
 def get_epochs(binary_array, Fs, verbose = False):
     
@@ -228,6 +229,29 @@ def convert_points_to_target_vector(points, vector):
     
     return vector_target
     
+
+def interpolate1D(array, length_new, kind = 'linear'):
+    '''
+    This function interpolates the given array to set a different lenght
+
+    Parameters
+    ----------
+    array : numpy.ndarray
+        Array to interpolate.
+    length_new : int/float
+        New lenght of the array.
+    kind : str
+        Kind of interpolation to apply to the data
+
+    Returns
+    -------
+    Array_new.
+
+    '''
+    f = interpolate.interp1d(np.arange(len(array)), array, kind = 'linear', fill_value = 'extrapolate')
+    return f(np.linspace(0,len(array),length_new))
+    
+
 if __name__ == '__main__':
     data = np.random.rand(100,10)
     data[12:21,1] = 10

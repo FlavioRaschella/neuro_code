@@ -81,10 +81,10 @@ def load_data_from_folder(folder, file_num, file_format, **kwargs):
         if type(file_num[0]) is not(list):
             file_num = [file_num]
     else:
-        raise Exception('file_num must be a list.')
+        raise Exception('ERROR: file_num must be a list.')
     
     if len(file_num) != len(folder):
-        raise Exception('Folder and File_num variables should have the same length!')
+        raise Exception('ERROR: Folder and File_num variables should have the same length!')
         
     # Check that format type is among the possible ones
     format_exist = False
@@ -94,7 +94,7 @@ def load_data_from_folder(folder, file_num, file_format, **kwargs):
             break
     
     if not(format_exist):
-        raise Exception('Assigned format different from the implemented ones. \n Check the "format_type" enumerator.')
+        raise Exception('ERROR: Assigned format different from the implemented ones. \n Check the "format_type" enumerator.')
         
     # Get file(s) name
     for idx, fld in enumerate(folder):
@@ -109,7 +109,7 @@ def load_data_from_folder(folder, file_num, file_format, **kwargs):
                     file_tmp = glob.glob(os.path.join(fld,'*' + str(fl_n) + pre_ext + file_format))[0]
                     lst_tmp.append(file_tmp.split(os.sep)[-1])
                 except:
-                    raise Exception('File {} does not exist in folder {}'.format(str(fl_n) + file_format,fld))
+                    raise Exception('ERROR: File {} does not exist in folder {}'.format(str(fl_n) + file_format,fld))
             file_name.append(lst_tmp)
             folder_name.append([fld for cnt in file_name[idx] ])
     
@@ -120,7 +120,7 @@ def load_data_from_folder(folder, file_num, file_format, **kwargs):
     
     # Check that folder_name and file_name have the same length
     if len(folder_name) != len(file_name):
-        raise Exception('Folder and File variables have different length!')
+        raise Exception('ERROR: Folder and File variables have different length!')
     
     # Print back information
     if verbose:
@@ -152,7 +152,7 @@ def load_data_from_file(_folder,_file,_file_format):
         try:
             nsx_file = NsxFile(os.path.join(_folder,_file))
         except Exception:
-            raise Exception('File {} does not exist!'.format(os.path.join(_folder,_file)))
+            raise Exception('ERROR: File {} does not exist!'.format(os.path.join(_folder,_file)))
             
         
         # Extract data - note: data will be returned based on *SORTED* elec_ids, see cont_data['elec_ids']
@@ -167,7 +167,7 @@ def load_data_from_file(_folder,_file,_file_format):
         try:
             nev_file = NevFile(os.path.join(_folder,_file))
         except Exception:
-            raise Exception('File {} does not exist!'.format(os.path.join(_folder,_file)))
+            raise Exception('ERROR: File {} does not exist!'.format(os.path.join(_folder,_file)))
         
         # Extract data and separate out spike data
         # Note, can be simplified: spikes = nev_file.getdata(chans)['spike_events'], shown this way for general getdata() call
@@ -186,7 +186,7 @@ def load_data_from_file(_folder,_file,_file_format):
         if type(f) is dict:
             data = from_matstruct_to_pydict(f)
         else:
-            raise Exception('{} MAT file is not saved as a dict!'.format(os.path.join(_folder,_file)))
+            raise Exception('ERROR: {} MAT file is not saved as a dict!'.format(os.path.join(_folder,_file)))
         
     return data
     # End of load_data_from_file
@@ -197,7 +197,7 @@ def load_mat_file(_file):
             return fun(_file)
         except:
             pass
-    raise Exception('File {} does not exist!'.format(_file))
+    raise Exception('ERROR: File {} does not exist!'.format(_file))
 
 """
 This function remove list enclosure
@@ -321,7 +321,7 @@ def from_matstruct_to_pydict(_td, **kwargs):
     #             try:
     #                 val = _td[key]
     #             except:
-    #                 raise Exception('Field {} does not exist!'.format(key))
+    #                 raise Exception('ERROR: Field {} does not exist!'.format(key))
     #             #  Check type of variable
     #             if type(val) == str and key not in td_out.keys():
     #                 td_out[key] = val

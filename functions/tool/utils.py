@@ -7,6 +7,8 @@ Created on Thu Feb 20 10:57:11 2020
 """
 
 import numpy as np
+import pickle
+import os
 
 def group_fields(_dict, _fields):
     '''
@@ -282,6 +284,28 @@ def transpose(array, direction = 'column'):
             
     return array
     
+
+def open_figures_pickle(folder):
+    '''
+    This function opens all the pickle-saved figures in a folder
+
+    Parameters
+    ----------
+    folder : str
+        Folder containing the pickle-saved figures.
+
+    Returns
+    -------
+    The figures.
+
+    '''
+    
+    # Find all the files finishing in .pickle
+    for file in os.listdir(folder):
+        if file.endswith('.pickle'):
+            figure_to_show = os.path.join(folder, file)
+            figx = pickle.load(open(figure_to_show, 'rb'))
+            figx.show()
 
 if __name__ == '__main__':
     vector1 = np.arange(10)

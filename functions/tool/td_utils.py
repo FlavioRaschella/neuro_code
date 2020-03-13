@@ -683,19 +683,21 @@ def get_field(_td, _signals, save_signals_name = False):
     return td_out
 
 
-def td_plot(_td, _signals, **kwargs):
+def td_plot(td, y, **kwargs):
     '''
     This function plots signals from the td dict.
 
     Parameters
     ----------
-    _td : dict
+    td : dict
         Trial data.
-    _signals : str/list of str
+    y : str/list of str
         Signals to plot.
+    x : str/list of str
+        Signal to use for x axis.
     subplot : tuple
         Structure of the suvplots in the figure.
-    gait_events : str/list of str
+    events : str/list of str
         Gait events to plot.
     title : str
         Title of the plot.
@@ -707,31 +709,40 @@ def td_plot(_td, _signals, **kwargs):
         Flag for saving the figure.
 
     Example:
-        td_plot(td,['LFP_BIP7','LFP_BIP9'], gait_events = ['RFS','LFS'], subplot = (2,1))
+        td_plot(td,['LFP_BIP7','LFP_BIP9'], events = ['RFS','LFS'], subplot = (2,1))
 
     '''
     
     # Input variables
     subplot = ()
-    gait_events = []
-    title = ''
-    save_figure = False
-    ylim = ()
-    xlim = ()
-    ylabel = ''
-    xlabel = ''
+    events = None
+    title = None
+    x = None
+    ylim = None
+    xlim = None
+    ylabel = None
+    xlabel = None
+    colours = None
     grid_plot = True
+    ax_external = None
+    maximise = False
+    save_figure = False
+    save_format = 'pdf'
     
     # Check input variables
     for key,value in kwargs.items():
-        if key == 'gait_events':
-            gait_events = value
+        if key == 'events':
+            events = value
         elif key == 'subplot':
             subplot = value
+        elif key == 'x':
+            x = value
         elif key == 'title':
             title = value
         elif key == 'grid_plot':
             grid_plot = value
+        elif key == 'ax':
+            ax = value
         elif key == 'ylabel':
             ylabel = value
         elif key == 'xlabel':
@@ -740,42 +751,96 @@ def td_plot(_td, _signals, **kwargs):
             ylim = value
         elif key == 'xlim':
             xlim = value
+        elif key == 'colours':
+            colours = value
+        elif key == 'maximise':
+            maximise = value
         elif key == 'save':
-            save_figure = value
+            save_figure = True
+            save_name = value
+        elif key == 'save_format':
+            save_format = value
 
     # Check input variables
-    if type(_td) is not dict:
-        raise Exception('ERROR: td type must be a dict! It is a {}'.format(type(_td)))
+    if type(td) is not dict:
+        raise Exception('ERROR: td type must be a dict! It is a {}'.format(type(td)))
         
-    if type(_signals) is str:
-        _signals = [_signals]
+    if type(y) is str:
+        y = [y]
         
     # Check whether _signals elements are in _td
-    if not(is_field(_td, _signals)):
+    if not(is_field(td, y)):
         raise Exception('ERROR: _signals must be in _td!')
 
     # Check whether gait_field elements are in _td
-    if len(gait_events) != 0:
-        if not(is_field(_td, gait_events)):
-            raise Exception('ERROR: {} must be in _td!'.format(gait_events))
+    if events != None:
+        if not(is_field(td, events)):
+            raise Exception('ERROR: {} must be in _td!'.format(events))
+    
+    # Get min signal number in a plot
+    min_signal_n = 1
+    for signal in y:
+        if type(signal) == list and len(signal) > min_signal_n:
+            min_signal_n = len(signal)
+    
+    if type(save_format) is str:
+        save_format = [save_format]
         
-    # Check subplot dimension
-    if not(subplot):
-        subplot = (len(_signals),1)
+    if type(save_format) is not list:
+        raise Exception('ERROR: type(save_format) is not a list!')
         
-    # Plot
-    fig, axs = plt.subplots(nrows = subplot[0], ncols = subplot[1], sharex=True)
-    if title != '':
-        fig.suptitle('File {}'.format(title), fontsize=10)
+    # Figure
+    if ax_external == None:
+        # Check subplot dimension
+        if not(subplot):
+            subplot = (len(y),1)
+            fig, axs = plt.subplots(nrows = subplot[0], ncols = subplot[1], sharex=True)
+    else:
+        axs = ax_external
+    
+    # Create figure
+    if title != None:
+        plt.suptitle(title)
+    
+    if maximise:
+        mng = plt.get_current_fig_manager()
+        mng.window.showMaximized()
     
     if type(axs).__module__ != np.__name__:
         axs  = [axs]
     
-    for signal, ax in zip(_signals,axs):
+    # Prepare plotting variables
+    # Check x axis
+    if x == None:
+        x_list = [None] * len(y)
+    elif x != None and type(x) == str:
+        x_list = [x] * len(y)
+    elif x != None and type(x) == list:
+        if len(x) == len(y):
+            x_list = x
+        else:
+            raise Exception('ERROR: x list have different length from y list!')
+    else:
+        raise Exception('ERROR: x must be None, str ot list of str!')
+    
+    # Check colours axis
+    if colours == None:
+        c_list = [[None] * min_signal_n] * len(y)
+    elif colours != None and type(colours) == list and type(colours[0]) != list:
+        c_list = [colours] * len(y)
+    elif colours != None and type(colours) == list and type(colours[0]) == list:
+        c_list = colours
+    
+    for x_ax, signal, ax, col in zip(x_list, y, axs, c_list):
         
         # Set plot title
         # print(signal)
-        ax.set_title(signal)
+        if type(signal) is list:
+            signal_name = ' + '.join(signal)
+        else:
+            signal_name = signal
+                
+        ax.set_title(signal_name)
         
         # Set plot labels
         if xlabel != '':
@@ -784,23 +849,53 @@ def td_plot(_td, _signals, **kwargs):
             ax.set_ylabel('')
         
         # Set axes limits
-        if ylim:
+        if ylim != None:
             ax.set_ylim(ylim)
         else:
-            ylim_tmp = tuple([min(_td[signal]), max(_td[signal])])
+            if type(signal) is list:
+                ylim_tmp = [+np.inf, -np.inf]
+                for sig in signal:
+                    if min(td[sig]) < ylim_tmp[0]:
+                        ylim_tmp[0] = min(td[sig])
+                    if max(td[sig]) > ylim_tmp[1]:
+                        ylim_tmp[1] = max(td[sig])
+            else:
+                ylim_tmp = tuple([min(td[signal]), max(td[signal])])
             ax.set_ylim(ylim_tmp)
-        if xlim:
+        if xlim != None:
             ax.set_xlim(xlim)
         
         # Set plot grid
         ax.grid(grid_plot)
         
         # Plot signal
-        ax.plot(_td[signal])
+        if type(signal) is list:
+            for sig, c in zip(signal, col):
+                if x_ax == None:
+                    if c == None:
+                        ax.plot(td[sig])
+                    else:
+                        ax.plot(td[sig],color = c)
+                else:
+                    if c == None:
+                        ax.plot(td[x_ax],td[sig])
+                    else:
+                        ax.plot(td[x_ax],td[sig],color = c)
+        else:
+            if x_ax == None:
+                if c == None:
+                    ax.plot(td[signal])
+                else:
+                    ax.plot(td[signal],color = col)
+            else:
+                if c == None:
+                    ax.plot(td[x_ax],td[signal])
+                else:
+                    ax.plot(td[x_ax],td[signal],color = col)
         
         # Plot gait events
-        if len(gait_events) != 0:
-            for event in gait_events:
+        if events != None:
+            for event in events:
                 if 'R' in event:
                     line_style = event_linestyle.R.value
                 else:
@@ -811,8 +906,26 @@ def td_plot(_td, _signals, **kwargs):
                 else:
                     col = event_color.FO.value
                     
-                for ev in _td[event]:
+                for ev in td[event]:
                     ax.axvline(ev,ylim[0], ylim[1], color = col, linestyle = line_style)
+    
+    # Set tight plot
+    plt.tight_layout()
+    
+    if save_figure:
+        for form in save_format:
+            if form == 'pickle':
+                import pickle
+                pickle.dump(fig, open(save_name +'.pickle', 'wb'))
+            elif form == 'pdf':
+                mng = plt.get_current_fig_manager()
+                mng.window.showMaximized()
+                fig.savefig(save_name + '.pdf', bbox_inches='tight')
+            else:
+                raise Exception('ERROR: wrong save format assignaed!')
+    
+    if ax_external == None:
+        return fig, axs
 
 def add_params(td, **kwargs):
     '''
