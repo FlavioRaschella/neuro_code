@@ -8,7 +8,7 @@ Created on Tue Feb 18 14:16:01 2020
 
 #%% Libraries
 # Import data loading, processing
-from td_utils import load_pipeline, cleaning_pipeline, preprocess_pipeline
+from td_utils import load_pipeline, cleaning_pipeline, preprocess_pipeline, td_plot
 
 #%% Load data
 DATA_PATH = ['/Volumes/MK_EPIOS/PD/from ED']
@@ -27,26 +27,24 @@ td = load_pipeline(DATA_PATH, DATA_FILE, FORMAT, **LOAD_OPT)
 #%% CLEANING DATA
 CHANNELS = [['LFP_BIP7','LFP_BIP8'],['LFP_BIP8','LFP_BIP9'],['LFP_BIP10','LFP_BIP11'],['LFP_BIP11','LFP_BIP12']]
 
-CLEANING_OPT = {'combine_fields': {'fields': CHANNELS, 'method': 'subtract', 'remove_selected_fields': True, 'save_name_to_params': True, 'inplace': True},
+CLEANING_OPT = {'combine_fields': {'fields': CHANNELS, 'method': 'subtract', 'remove_selected_fields': True, 'save_name_to_params': True},
                 'remove_artefacts': {'method': 'amplitude', 'threshold': 300}}
 
 td = cleaning_pipeline(td,**CLEANING_OPT)
 
 #%% PREPROCESS DATA
-
-PREPROCESS_OPT = {'filter': {'type': 'bandpass', 'fmin' : 1, 'fmax': 50},
-                  'multitaper': {'wind_size': 0.25,'wind_step': 0.01, 'freq_start': 10, 'freq_stop': 100, 'NW': 4}}
+PREPROCESS_OPT = {'multitaper': {'wind_size': 0.25,'wind_step': 0.01, 'freq_start': 10, 'freq_stop': 100, 'NW': 4}}
+# PREPROCESS_OPT = {'filter': {'kind': 'bandpass', 'f_min' : 50, 'f_max': 100, 'order':3}}
 
 td = preprocess_pipeline(td,**PREPROCESS_OPT)
 
-
 #%% Extract features
-FEATURES = {'selected':'PSD','PSD':dict(fmin=1, fmax=250, wlen=0.5, wstep=82, decim=4)}
+FEATURES = {}
 
 #%% DECODER
 CLASSIFIER =    {'selected': 'RF', \
-                'GB': dict(trees=1000, learning_rate=0.01, depth=3, seed=666), \
-                'RF': dict(trees=1000, depth=5, seed=666), \
+                'GB': dict(trees=1000, learning_rate=0.01, depth=3, seed=333), \
+                'RF': dict(trees=1000, depth=5, seed=333), \
                 'rLDA': dict(r_coeff=0.3), \
                 'LDA': dict()}
 EXPORT_CLS = True

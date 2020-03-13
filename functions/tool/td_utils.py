@@ -32,6 +32,10 @@ from utils import bipolar, add, flatten_list, group_fields
 
 from power_estimation import moving_pmtm
 
+from filters import butter_bandpass_filtfilt as bpff
+from filters import butter_lowpass_filtfilt as lpff
+from filters import butter_highpass_filtfilt as hpff
+
 # Plotting events characteristics
 class event_color(Enum):
     FS = 'r'
@@ -73,7 +77,6 @@ def segment_data(_td, td_epoch):
         for epoch in epochs:
             td_out_tmp = td_tmp.copy()
             for k,v in td_out_tmp.items():
-                break
                 if k != 'params':
                     td_out_tmp[k] = np.array(v)[epoch]
                 elif 'time' in k:
@@ -117,16 +120,16 @@ def identify_artefacts(_td, **kwargs):
     for key,value in kwargs.items():
         if key == 'fields':
             fields = value
-        if key == 'Fs':
+        elif key == 'Fs':
             Fs = value
-        if key == 'method':
+        elif key == 'method':
             method = value
-        if key == 'method':
-            method = value
-        if key == 'signal_n':
+        elif key == 'signal_n':
             signal_n = value
-        if key == 'threshold':
+        elif key == 'threshold':
             threshold = value
+        else:
+            print('WARNING: key "{}" not recognised by the identify_artefacts function...'.format(key))
 
     # Get a temporary copy of td
     td = _td.copy()
@@ -193,7 +196,7 @@ def combine_fields(_td, _fields, **kwargs):
     method = 'subtract'
     remove_selected_fields = True
     save_name_to_params = False
-    inplace = False
+    inplace = True
 
     # Check input variables
     for key,value in kwargs.items():
@@ -265,7 +268,7 @@ def combine_fields(_td, _fields, **kwargs):
         return td
 
 
-def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_selected_fields = True, inplace = False):
+def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_selected_fields = True, inplace = True):
     '''
     This function converts the content of fields in a vector
 
@@ -333,7 +336,7 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_s
         return td
     
 
-def combine_dicts(_td1, _td2, inplace = False):
+def combine_dicts(_td1, _td2, inplace = True):
     """        
     This function combine 2 dicts.
     In case of same fields, the first dict dominates
@@ -385,7 +388,7 @@ def combine_dicts(_td1, _td2, inplace = False):
         return td1
 
 
-def remove_fields(_td, _field, exact_field = False, inplace = False):
+def remove_fields(_td, _field, exact_field = False, inplace = True):
     '''
     This function removes fields from a dict.
 
@@ -451,7 +454,7 @@ def remove_fields(_td, _field, exact_field = False, inplace = False):
         return td
 
 
-def remove_all_fields_but(_td, _field, exact_field = False, inplace = False):
+def remove_all_fields_but(_td, _field, exact_field = False, inplace = True):
     '''
     This function removes all fields from a dict but the one selected.
 
@@ -517,7 +520,7 @@ def remove_all_fields_but(_td, _field, exact_field = False, inplace = False):
         return td
 
 
-def add_field_from_dict(_td, _dict, inplace = False, verbose = False):
+def add_field_from_dict(_td, _dict, inplace = True, verbose = False):
     '''
     This function adds fields in a dict to another dict.
     
@@ -724,7 +727,7 @@ def td_plot(td, y, **kwargs):
     xlabel = None
     colours = None
     grid_plot = True
-    ax_external = None
+    axs_external = []
     maximise = False
     save_figure = False
     save_format = 'pdf'
@@ -741,8 +744,8 @@ def td_plot(td, y, **kwargs):
             title = value
         elif key == 'grid_plot':
             grid_plot = value
-        elif key == 'ax':
-            ax = value
+        elif key == 'axs':
+            axs_external = value
         elif key == 'ylabel':
             ylabel = value
         elif key == 'xlabel':
@@ -760,6 +763,8 @@ def td_plot(td, y, **kwargs):
             save_name = value
         elif key == 'save_format':
             save_format = value
+        else:
+            print('WARNING: key "{}" not recognised by the td_plot function...'.format(key))
 
     # Check input variables
     if type(td) is not dict:
@@ -790,13 +795,16 @@ def td_plot(td, y, **kwargs):
         raise Exception('ERROR: type(save_format) is not a list!')
         
     # Figure
-    if ax_external == None:
+    if len(axs_external) == 0:
         # Check subplot dimension
         if not(subplot):
             subplot = (len(y),1)
             fig, axs = plt.subplots(nrows = subplot[0], ncols = subplot[1], sharex=True)
     else:
-        axs = ax_external
+        axs = axs_external
+    
+    if len(axs) != len(y):
+        raise Exception('ERROR: axs and y have different length: axs: {} != y: {}'.format(len(axs),len(y)))
     
     # Create figure
     if title != None:
@@ -830,6 +838,8 @@ def td_plot(td, y, **kwargs):
         c_list = [colours] * len(y)
     elif colours != None and type(colours) == list and type(colours[0]) == list:
         c_list = colours
+    
+    # print(x_list,'\n',y,'\n',axs,'\n',c_list)
     
     for x_ax, signal, ax, col in zip(x_list, y, axs, c_list):
         
@@ -883,12 +893,12 @@ def td_plot(td, y, **kwargs):
                         ax.plot(td[x_ax],td[sig],color = c)
         else:
             if x_ax == None:
-                if c == None:
+                if col[0] == None:
                     ax.plot(td[signal])
                 else:
                     ax.plot(td[signal],color = col)
             else:
-                if c == None:
+                if col[0] == None:
                     ax.plot(td[x_ax],td[signal])
                 else:
                     ax.plot(td[x_ax],td[signal],color = col)
@@ -924,7 +934,7 @@ def td_plot(td, y, **kwargs):
             else:
                 raise Exception('ERROR: wrong save format assignaed!')
     
-    if ax_external == None:
+    if len(axs_external) == 0:
         return fig, axs
 
 def add_params(td, **kwargs):
@@ -989,14 +999,29 @@ def combine_epochs(td_1, td_2):
     return td_epoch
 
 def compute_multitaper(_td, **kwargs):
-    
+    '''
+    This function compute the multitapers spectal analysis for the td signals
+
+    Parameters
+    ----------
+    _td : dict / list of dict
+        trial data with epoch field.
+    **kwargs : dict
+        Additional information for computing multitaper.
+
+    Returns
+    -------
+    td : dict / list of dict
+        trial data with signals analysed based on the multitaper parameters.
+
+    '''
     # Multitaper information
     window_size_sec = 0.25 # in seconds
     window_step_sec = 0.01 # in seconds
     freq_min = 10
     freq_max = 100
     NW = 4
-    inplace = False
+    inplace = True
     verbose = False
 
     # Check input variables
@@ -1013,6 +1038,8 @@ def compute_multitaper(_td, **kwargs):
             NW = value
         elif key == 'inplace':
             inplace = value
+        else:
+            print('WARNING: key "{}" not recognised by the compute_multitaper function...'.format(key))
     
     if inplace:
         td = _td
@@ -1069,9 +1096,65 @@ def compute_multitaper(_td, **kwargs):
 
 
 def compute_filter(_td, **kwargs):
-    pass
+    # Filtering information
+    kind = None
+    f_min = None
+    f_max = None
+    order = 5
+    inplace = True
+    verbose = False
     
-    # return td
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'kind':
+            kind = value
+        elif key == 'f_min':
+            f_min = value
+        elif key == 'f_max':
+            f_max = value
+        elif key == 'order':
+            order = value
+        elif key == 'verbose':
+            verbose = value
+        elif key == 'inplace':
+            inplace = value
+        else:
+            print('WARNING: key "{}" not recognised by the compute_multitaper function...'.format(key))
+    
+    if inplace:
+        td = _td
+    else:
+        td = _td.copy()
+    
+    input_dict = False
+    # check dict input variable
+    if type(td) is dict:
+        input_dict = True
+        td = [td]
+    
+    if type(td) is not list:
+        raise Exception('ERROR: _td must be a list of dictionaries!')
+    
+    for td_tmp in td:
+        Fs = td_tmp['params']['Fs']
+        
+        for iSgl, signal in enumerate(td_tmp['params']['signals']):
+            if verbose:
+                print('Filtering signal {}/{}'.format(iSgl+1, len(td_tmp['signal_names'])))
+            if kind == 'bandpass':
+                td_tmp[signal] = bpff(data = td_tmp[signal], lowcut = f_min, highcut = f_max, fs = Fs, order=order)
+            elif kind == 'lowpass':
+                td_tmp[signal] = lpff(data = td_tmp[signal], lowcut = f_min, fs = Fs, order=order)
+            elif kind == 'highpass':
+                td_tmp[signal] = hpff(data = td_tmp[signal], highcut = f_max, fs = Fs, order=order)
+            else:
+                raise Exception('ERROR: wrong kind of filter applied! Kind given is : {}'.format(kind))
+    
+    if input_dict:
+        td = td[0]
+    
+    if not inplace:
+        return td
 
 def load_pipeline(data_path, data_files, data_format, **kwargs):
     '''
@@ -1229,23 +1312,23 @@ def preprocess_pipeline(td, **kwargs):
 
     '''
     
-    pass
     # Input variables
-    filter_dict = None
-    multitaper_dict = None
+    operations = []
     
     # Check input variables
     for key,value in kwargs.items():
         if key == 'filter':
-            filter_dict = value
+            operations.append((key,value))
         elif key == 'multitaper':
-            multitaper_dict = value
+            operations.append((key,value))
+        else:
+            print('WARNING: key "{}" not recognised by the compute_multitaper function...'.format(key))
     
-    if filter_dict != None:
-        pass
-    
-    if multitaper_dict != None:
-        pass
+    for operation in operations:
+        if operation[0] == 'filter':
+            compute_filter(td, **operation[1])
+        elif operation[0] == 'multitaper':
+            compute_multitaper(td, **operation[1])
     
     return td
 
