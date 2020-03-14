@@ -216,3 +216,5 @@ from os import path
 
 for td_tmp, gait_event in zip(td, gait_events):
     savemat(path.join(td_tmp['Folder'],td_tmp['File'][0:-4] + '_gait_events_' + save_filename + '.mat'), gait_event, appendmat=True)
+
+#EOF
