@@ -16,6 +16,9 @@ import os, glob
 # Import BlackRock library
 from brpylib import NsxFile, NevFile
 
+# Import utils
+from utils import flatten_list
+
 # Library to open mat files
 import scipy.io
 # Enumerator library
@@ -27,20 +30,20 @@ class folmat_type(Enum):
     ns6 = '.ns6'
     mat = '.mat'
 
-def load_data_from_folder(folder, file_num, file_format, **kwargs):
+def load_data_from_folder(folders, **kwargs):
     '''
-    This function loads the data in the specified folder.
+    This function loads the data in the specified folders.
 
     Parameters
     ----------
-    folder : str / list of str
+    folders : str / list of str
         Path(s) where to find the data.
-    file_num : list of int / list of list of int
+    files_number : list of int / list of list of int
         Number(s) of the dataset to load.
-    file_format : str
+    files_format : str
         Format of the data to collect.
     pre_ext : str, optional
-        Name that distinguish the file (between file_num and file_format)
+        Name that distinguish the file (between file_num and files_format)
     verbose : bool, optional
         Print what is happening on the function.
 
@@ -51,90 +54,125 @@ def load_data_from_folder(folder, file_num, file_format, **kwargs):
 
     Example
     -------
-        folder = ['/Volumes/STN_CHINA/HH10/HH10_20190228', '/Volumes/STN_CHINA/HH10/HH10_20190228']
+        folders = ['/Volumes/STN_CHINA/HH10/HH10_20190228', '/Volumes/STN_CHINA/HH10/HH10_20190228']
         file_num = [[],[1,2]]
-        file_format = '.ns6'
-        td = load_data_from_folder(folder = folder,file_num = file_num,file_format = file_format, pre_ext = 'trial')
+        files_format = '.ns6'
+        td = load_data_from_folder(folders = folders,file_num = file_num,files_format = files_format, pre_ext = 'trial')
 
     '''
     # Input variables
+    files_number = None
+    files_name = None
+    files_format = '.mat'
     pre_ext = ''
     verbose = False
     
     # Function variables
-    file_name = []
-    folder_name = []
+    folders_list = []
+    files_list = []
     td = []
     
     # Check input variables
     for key,value in kwargs.items():
-        if key == 'verbose':
-            verbose = value
+        if key == 'files_number':
+            files_number = value
+        elif key == 'files_name':
+            files_name = value
+        elif key == 'files_format':
+            files_format = value
         elif key == 'pre_ext':
             pre_ext = value
+        elif key == 'verbose':
+            verbose = value
 
     # Check input data
-    if type(folder) is str:
-        folder = [folder]
+    if type(folders) is str:
+        folders = [folders]
     
-    if type(file_num) is list:
-        if type(file_num[0]) is not(list):
-            file_num = [file_num]
-    else:
-        raise Exception('ERROR: file_num must be a list.')
+    if files_number == None and files_name == None:
+        raise Exception('ERROR: you must assign either files_number or files_name!')
+    if files_number != None and files_name != None:
+        raise Exception('ERROR: you can assign either files_number or files_name, not both!')
     
-    if len(file_num) != len(folder):
-        raise Exception('ERROR: Folder and File_num variables should have the same length!')
-        
+    if files_number != None:
+        if type(files_number) is int or type(files_number) is float:
+            files_number = [files_number]
+        if type(files_number) is list:
+            if type(files_number[0]) is not list:
+                files_number = [files_number]
+        else:
+            raise Exception('ERROR: files_number must be a list.')
+            
+        if len(files_number) != len(folders):
+            raise Exception('ERROR: Folder and files_number variables must have the same length!')
+            
+    if files_name != None:
+        if type(files_name) is str:
+            files_name = [files_name]
+        if type(files_name) is list:
+            if type(files_name[0]) is not list:
+                files_name = [files_name]
+        else:
+            raise Exception('ERROR: files_name must be a list.')
+            
+        if len(files_name) != len(folders):
+            raise Exception('ERROR: folders and files_name variables must have the same length!')
+    
     # Check that format type is among the possible ones
     format_exist = False
     for fm_type in folmat_type:
-        if fm_type.value == file_format:
+        if fm_type.value == files_format:
             format_exist = True
             break
+    if not format_exist:
+        print('WARNING: You did not assign a file format!\nFile format is then: "{}"'.format(files_format))
     
-    if not(format_exist):
-        raise Exception('ERROR: Assigned format different from the implemented ones. \n Check the "format_type" enumerator.')
-        
-    # Get file(s) name
-    for idx, fld in enumerate(folder):
-        # print(idx, fld)
-        if len(file_num[idx]) == 0:
-            file_name.append([f for f in os.listdir(fld) if f.endswith(file_format)])
-            folder_name.append([fld for f in os.listdir(fld) if f.endswith(file_format)])
-        else:
-            lst_tmp = []
-            for fl_n in file_num[idx]:
+    # Get file id
+    if files_number != None:
+        for folder, files in zip(folders, files_number):
+            files_tmp = []
+            for file in files:
                 try:
-                    file_tmp = glob.glob(os.path.join(fld,'*' + str(fl_n) + pre_ext + file_format))[0]
-                    lst_tmp.append(file_tmp.split(os.sep)[-1])
+                    file_tmp = glob.glob(os.path.join(folder,'*' + str(file) + pre_ext + files_format))[0]
+                    files_tmp.append(file_tmp.split(os.sep)[-1])
                 except:
-                    raise Exception('ERROR: File {} does not exist in folder {}'.format(str(fl_n) + file_format,fld))
-            file_name.append(lst_tmp)
-            folder_name.append([fld for cnt in file_name[idx] ])
+                    raise Exception('ERROR: File {} does not exist in folder {}!'.format(str(file) + files_format,folder))
+            files_list.append(files_tmp)
+            folders_list.append([folder for cnt in files_tmp ])
+    elif files_name != None:
+        for folder, files in zip(folders, files_name):
+            files_tmp = []
+            for file in files:
+                try:
+                    file_tmp = glob.glob(os.path.join(folder,'*' + file + pre_ext + files_format))[0]
+                    files_tmp.append(file_tmp.split(os.sep)[-1])
+                except:
+                    raise Exception('ERROR: File {} does not exist in folder {}!'.format(str(file) + files_format,folder))
+            files_list.append(files_tmp)
+            folders_list.append([folder for cnt in files_tmp ])
     
     # Flatten lists
-    flatten = lambda l: [item for sublist in l for item in sublist]
-    folder_name = flatten(folder_name)
-    file_name = flatten(file_name)
+    # flatten = lambda l: [item for sublist in l for item in sublist]
+    folders_list = flatten_list(folders_list, False, False)
+    files_list = flatten_list(files_list, False, False)
     
     # Check that folder_name and file_name have the same length
-    if len(folder_name) != len(file_name):
-        raise Exception('ERROR: Folder and File variables have different length!')
+    if len(folders_list) != len(files_list):
+        raise Exception('ERROR: Folder and File variables have the same length!')
     
     # Print back information
     if verbose:
         print('Files to load...')
-        for fld, fil in zip(folder_name, file_name):
-            print(os.path.join(fld,fil))
+        for folder, files in zip(folders_list, files_list):
+            print(os.path.join(folder,files))
     
     # Insert into dict lambda funtion
     insert = lambda _dict, obj, pos: {k: v for k, v in (list(_dict.items())[:pos] + list(obj.items()) + list(_dict.items())[pos:])}
     
     # Extract data from file
-    for fld, fil in zip(folder_name, file_name):
-        td_dict_tmp = load_data_from_file(fld,fil,file_format)
-        td_dict_tmp = insert(td_dict_tmp,{'Folder':fld ,'File':fil},0)
+    for folder, file in zip(folders_list, files_list):
+        td_dict_tmp = load_data_from_file(folder,file,files_format)
+        td_dict_tmp = insert(td_dict_tmp,{'Folder':folder ,'File':file},0)
         td.append(td_dict_tmp)
     
     print('DATA LOADED!')
