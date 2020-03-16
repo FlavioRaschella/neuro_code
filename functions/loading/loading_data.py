@@ -171,6 +171,7 @@ def load_data_from_folder(folders, **kwargs):
     
     # Extract data from file
     for folder, file in zip(folders_list, files_list):
+        # break
         td_dict_tmp = load_data_from_file(folder,file,files_format)
         td_dict_tmp = insert(td_dict_tmp,{'Folder':folder ,'File':file},0)
         td.append(td_dict_tmp)
@@ -182,15 +183,15 @@ def load_data_from_folder(folders, **kwargs):
 """
 This function loads a file based on its format
 """ 
-def load_data_from_file(_folder,_file,_file_format):
+def load_data_from_file(folder,file,file_format):
     
-    print('Opening file {}...'.format(os.path.join(_folder,_file)))
-    if (_file_format == folmat_type.ns3.value or _file_format == folmat_type.ns6.value):
+    print('Opening file {}...'.format(os.path.join(folder,file)))
+    if (file_format == folmat_type.ns3.value or file_format == folmat_type.ns6.value):
         # Open file
         try:
-            nsx_file = NsxFile(os.path.join(_folder,_file))
+            nsx_file = NsxFile(os.path.join(folder,file))
         except Exception:
-            raise Exception('ERROR: File {} does not exist!'.format(os.path.join(_folder,_file)))
+            raise Exception('ERROR: File {} does not exist!'.format(os.path.join(folder,file)))
             
         
         # Extract data - note: data will be returned based on *SORTED* elec_ids, see cont_data['elec_ids']
@@ -200,12 +201,12 @@ def load_data_from_file(_folder,_file,_file_format):
         # Close the nsx file now that all data is out
         nsx_file.close()
         
-    elif _file_format == folmat_type.nev.value:
+    elif file_format == folmat_type.nev.value:
         # Open file
         try:
-            nev_file = NevFile(os.path.join(_folder,_file))
+            nev_file = NevFile(os.path.join(folder,file))
         except Exception:
-            raise Exception('ERROR: File {} does not exist!'.format(os.path.join(_folder,_file)))
+            raise Exception('ERROR: File {} does not exist!'.format(os.path.join(folder,file)))
         
         # Extract data and separate out spike data
         # Note, can be simplified: spikes = nev_file.getdata(chans)['spike_events'], shown this way for general getdata() call
@@ -215,16 +216,16 @@ def load_data_from_file(_folder,_file,_file_format):
         # Close the nev file now that all data is out
         nev_file.close()
         
-    elif _file_format == folmat_type.mat.value:
+    elif file_format == folmat_type.mat.value:
         data = {}
         # Try loading matlab files        
-        f = load_mat_file(os.path.join(_folder,_file))
+        f = load_mat_file(os.path.join(folder,file))
         
         # Clean data if it is a dict
         if type(f) is dict:
-            data = from_matstruct_to_pydict(f)
+            data = process_mat_dict(f)
         else:
-            raise Exception('ERROR: {} MAT file is not saved as a dict!'.format(os.path.join(_folder,_file)))
+            raise Exception('ERROR: {} MAT file is not saved as a dict!'.format(os.path.join(folder,file)))
         
     return data
     # End of load_data_from_file
@@ -272,124 +273,148 @@ def is_mat_struc(_var):
 """
 This function reduce a matlab struct to its core, in order to extract its fields
 """ 
-def reduce_mat_object(_var):
+
+def reduce_mat_array(val,kind = None):
+    if val.ndim == 2 and 1 in val.shape:
+        if val.shape == (1,1):
+            val = val[0]
+        else:
+            val = np.squeeze(val)
     
-    while _var.dtype is np.dtype('O'):
-        _var = _var[0]
+    if val.size == 1:
+        if kind in ['U']: # String
+            val = np.str(val[0])
+        elif kind in ['B','b']: # byte
+            val = np.float(val)
+        elif kind in ['H','u','i']: # int
+            val = np.int(val)
+    
+    return val
+    
+def process_mat_struct(key,val):
+    val = reduce_mat_array(val, kind = 'V')
+    
+    if type(val) == np.ndarray:
+        tmp_dict = dict()
+        # print(val.dtype.names)
+        for name in val.dtype.names:
+            # print(val[name].tolist())
+            tmp_dict[name] = val[name].tolist()
         
-    return _var
+        for k, v in tmp_dict.items():
+            # break
+            for idx, el in enumerate(v):
+                # break
+                tmp = process_mat_dict({'el':el})
+                tmp_dict[k][idx] = tmp['el']
+        
+    else:
+        raise Exception('ERROR: new data type in structure disassembling! Update the code...')
+
+    return tmp_dict
+
+def process_mat_cell(key,val):
+    val = reduce_mat_array(val, kind = 'O')
     
+    if type(val) == np.ndarray:
+        tmp_dict = dict()
+        # print(val.dtype.names)
+        tmp_dict[key] = val.tolist()
+        
+        for k, v in tmp_dict.items():
+            # break
+            for idx, el in enumerate(v):
+                # break
+                tmp = process_mat_dict({'el':el})
+                tmp_dict[k][idx] = tmp['el']
+        
+    else:
+        raise Exception('ERROR: new data type in structure disassembling! Update the code...')
+
+    return tmp_dict
+
 """
 This function tranform a matlab struct to a python dictionary
 """ 
-def from_matstruct_to_pydict(_td, **kwargs):
+def process_mat_dict(td):
     """
     Get a matlab struct and convert it to a tidy dict
     _td: dict
-    fields: list of fields
+    
+    This is the basic translation that is adopted:
+        matlab array -> python numpy array
+        matlab cell array -> python list
+        matlab structure -> python dict
     """
     td_out = {}
-    # fields_name = []
-    
-    # # Check input variables
-    # for key,value in kwargs.items():
-    #     if key == 'fields':
-    #         fields_name = value
-    
-    # if fields_name == None:
-    #     fields_name = []
-    
-    # if type(fields_name) is str:
-    #     fields_name = [fields_name]
-    #     print('fields_name must be a list of string. You inputed a string. Converting to list...')
-    
-    # # Check correct input variables
-    # if type(fields_name) is not list:
-    #     raise Exception('Field variable must be a list type!')
-    
-    # Stop field loop flag
-    is_not_all_list = True
-    
-    # Populate td_out dict
-    # if len(fields_name) == 0:                              
-    # Loop over fields.                    
-    while is_not_all_list:
-        # Loop internal check over single field
-        is_list = True
-        # Extract only the requested fields
-        for key, val in _td.items():
-            if '__' not in key:
-                # print(key, val); print(' ')
-                #  Check type of variable
-                if type(val) == str and key not in td_out.keys():
-                    td_out[key] = val
-                elif type(val) == int and key not in td_out.keys():
-                    td_out[key] = val
-                elif type(val) == float and key not in td_out.keys():
-                    td_out[key] = val
-                elif type(val) == list and key not in td_out.keys():
-                    td_out[key] = val
-                elif type(val) == np.ndarray:
-                    val_red = reduce_mat_object(val)
-                    
-                    if is_mat_struc(val_red):
-                        for key_struct, val_struct in zip(val_red.dtype.names, val_red.item()):
-                            val_struct_red = reduce_mat_object(val_struct)
-                            if is_mat_struc(val_struct_red):
-                                # print(key_struct)
-                                is_list = False
-                                td_out[key + '_' + key_struct] = val_struct_red
-                            else:
-                                td_out[key + '_' + key_struct] = reduce_list(np.ndarray.tolist(invert_to_column(val_struct_red)))
-                    else:
-                        td_out[key] = reduce_list(np.ndarray.tolist(invert_to_column(val_red)))
-        if is_list:
-            is_not_all_list = False
-        else:
-            # fields_name = td_out.keys()
-            _td = td_out.copy()
-            td_out = {}
-    # else:
-    #     while is_not_all_list:
-    #         # Loop internal check over single field
-    #         is_list = True
-    #         # Extract only the requested fields
-    #         for key in fields_name:
-    #             # Check that variable exists
-    #             try:
-    #                 val = _td[key]
-    #             except:
-    #                 raise Exception('ERROR: Field {} does not exist!'.format(key))
-    #             #  Check type of variable
-    #             if type(val) == str and key not in td_out.keys():
-    #                 td_out[key] = val
-    #             elif type(val) == int and key not in td_out.keys():
-    #                 td_out[key] = val
-    #             elif type(val) == float and key not in td_out.keys():
-    #                 td_out[key] = val
-    #             elif type(val) == list and key not in td_out.keys():
-    #                 td_out[key] = val
-    #             elif type(val) == np.ndarray:
-    #                 val_red = reduce_mat_object(val)
-                    
-    #                 if is_mat_struc(val_red):
-    #                     for key_struct, val_struct in zip(val_red.dtype.names, val_red.item()):
-    #                         val_struct_red = reduce_mat_object(val_struct)
-    #                         if is_mat_struc(val_struct_red):
-    #                             # print(key_struct)
-    #                             is_list = False
-    #                             td_out[key + '_' + key_struct] = val_struct_red
-    #                         else:
-    #                             td_out[key + '_' + key_struct] = reduce_list(np.ndarray.tolist(invert_to_column(val_struct_red)))
-                                
-    #                 else:
-    #                     td_out[key] = reduce_list(np.ndarray.tolist(invert_to_column(val_red)))
-    #         if is_list:
-    #             is_not_all_list = False
-    #         else:
-    #             fields_name = td_out.keys()
-    #             _td = td_out.copy()
-    #             td_out = {}
-
+    for key, val in td.items():
+        if '__' not in key:
+            # break; key = 'gait_time'; val = td[key]; key = 'fileComments'; val = td[key];            
+            # print(val.dtype.char)
+            
+            if val.dtype.char in ['U']: # String
+                td_out[key] = reduce_mat_array(val, 'U')
+            elif val.dtype.char in ['B','b']: # byte
+                td_out[key] = reduce_mat_array(val, 'B')
+            elif val.dtype.char in ['H','u','i']: # int
+                td_out[key] = reduce_mat_array(val, 'H')
+            elif val.dtype.char in ['d']: # numpy.ndarray
+                td_out[key] = reduce_mat_array(val,'d')
+            elif val.dtype.char in ['V']: # struct
+                td_out[key] = process_mat_struct(key,val)
+            elif val.dtype.char in ['O']: # cell
+                td_out[key] = process_mat_cell(key,val)
+            else:
+                raise Exception('ERROR: mat type "{}" not implemented! Update the code...'.format(val.dtype.char))
     return td_out
-    # End of from_matstruct_to_pydict
+
+
+# def flatten_dict(td):
+#     # Stop field loop flag
+#     is_not_all_list = True
+                             
+#     # Loop over fields.                    
+#     while is_not_all_list:
+#         # Loop internal check over single field
+#         is_list = True
+#         # Extract only the requested fields
+#         for key, val in td.items():
+#             if '__' not in key:
+#                 # break
+#                 print(key, val.dtype.char); print(' ')
+#                 #  Check type of variable
+#                 if type(val) == str and key not in td_out.keys():
+#                     td_out[key] = val
+#                 elif type(val) == int and key not in td_out.keys():
+#                     td_out[key] = val
+#                 elif type(val) == float and key not in td_out.keys():
+#                     td_out[key] = val
+#                 elif type(val) == list and key not in td_out.keys():
+#                     td_out[key] = val
+#                 elif type(val) == np.ndarray:
+#                     val_red = reduce_mat_object(val)
+                    
+#                     if is_mat_struc(val_red):
+#                         for key_struct, val_struct in zip(val_red.dtype.names, val_red.item()):
+#                             val_struct_red = reduce_mat_object(val_struct)
+#                             if is_mat_struc(val_struct_red):
+#                                 # print(key_struct)
+#                                 is_list = False
+#                                 td_out[key + '_' + key_struct] = val_struct_red
+#                             else:
+#                                 td_out[key + '_' + key_struct] = reduce_list(np.ndarray.tolist(invert_to_column(val_struct_red)))
+#                     else:
+#                         td_out[key] = reduce_list(np.ndarray.tolist(invert_to_column(val_red)))
+#         if is_list:
+#             is_not_all_list = False
+#         else:
+#             # fields_name = td_out.keys()
+#             td = td_out.copy()
+#             td_out = {}
+    
+    
+    
+    
+    
+    
+    
