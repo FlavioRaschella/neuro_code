@@ -387,6 +387,54 @@ def combine_dicts(_td1, _td2, inplace = True):
     if not inplace:
         return td1
 
+def extract_dicts(_td, fields, inplace = True):
+    """        
+    This function extracts a dictionary containing only the fields in input.
+    
+    Parameters
+    ----------
+    td : dict/list of dict
+        dict of the trial data
+    fields : str/list of str
+        Fields to combine in the new dict
+    inplace : string, optional
+        Perform operation on the input data dict. The default is False.
+
+    Returns
+    -------
+    td_out : dict/list of dict
+        trial data variable
+
+    """
+    if inplace:
+        td = _td
+    else:
+        td = _td.copy()
+    
+    input_dict = False
+    if type(td) is dict:
+        input_dict = True
+        td = [td]
+    
+    if type(fields) is str:
+        fields = [fields]
+    
+    td_out = []
+    for td_tmp in td:
+        dict_tmp = dict()
+        for field in fields:
+            if type(td[field]) is dict:
+                combine_dicts(dict_tmp, td[field], inplace = True)
+            else:
+                raise Exception('ERROR: td[{}] is not a dict!'.format(field))
+        td_out.append(dict_tmp)
+    
+    if input_dict:
+        td = td[0]
+    
+    if not inplace:
+        return td
+
 
 def remove_fields(_td, _field, exact_field = False, inplace = True):
     '''
