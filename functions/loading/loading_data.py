@@ -419,53 +419,5 @@ def reduce_one_element_list(_td):
             _td[k] = reduce_one_element_list(v)
     
     return _td
-
-# def flatten_dict(td):
-#     # Stop field loop flag
-#     is_not_all_list = True
-                             
-#     # Loop over fields.                    
-#     while is_not_all_list:
-#         # Loop internal check over single field
-#         is_list = True
-#         # Extract only the requested fields
-#         for key, val in td.items():
-#             if '__' not in key:
-#                 # break
-#                 print(key, val.dtype.char); print(' ')
-#                 #  Check type of variable
-#                 if type(val) == str and key not in td_out.keys():
-#                     td_out[key] = val
-#                 elif type(val) == int and key not in td_out.keys():
-#                     td_out[key] = val
-#                 elif type(val) == float and key not in td_out.keys():
-#                     td_out[key] = val
-#                 elif type(val) == list and key not in td_out.keys():
-#                     td_out[key] = val
-#                 elif type(val) == np.ndarray:
-#                     val_red = reduce_mat_object(val)
-                    
-#                     if is_mat_struc(val_red):
-#                         for key_struct, val_struct in zip(val_red.dtype.names, val_red.item()):
-#                             val_struct_red = reduce_mat_object(val_struct)
-#                             if is_mat_struc(val_struct_red):
-#                                 # print(key_struct)
-#                                 is_list = False
-#                                 td_out[key + '_' + key_struct] = val_struct_red
-#                             else:
-#                                 td_out[key + '_' + key_struct] = reduce_list(np.ndarray.tolist(invert_to_column(val_struct_red)))
-#                     else:
-#                         td_out[key] = reduce_list(np.ndarray.tolist(invert_to_column(val_red)))
-#         if is_list:
-#             is_not_all_list = False
-#         else:
-#             # fields_name = td_out.keys()
-#             td = td_out.copy()
-#             td_out = {}
     
-    
-    
-    
-    
-    
-    
+# EOF
