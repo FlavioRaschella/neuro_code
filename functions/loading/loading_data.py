@@ -66,6 +66,7 @@ def load_data_from_folder(folders, **kwargs):
     files_format = '.mat'
     pre_ext = ''
     verbose = False
+    reduce_lists = True
     
     # Function variables
     folders_list = []
@@ -82,6 +83,8 @@ def load_data_from_folder(folders, **kwargs):
             files_format = value
         elif key == 'pre_ext':
             pre_ext = value
+        elif key == 'reduce_lists':
+            reduce_lists = value
         elif key == 'verbose':
             verbose = value
 
@@ -174,6 +177,8 @@ def load_data_from_folder(folders, **kwargs):
         # break
         td_dict_tmp = load_data_from_file(folder,file,files_format)
         td_dict_tmp = insert(td_dict_tmp,{'Folder':folder ,'File':file},0)
+        if reduce_lists:
+            td_dict_tmp = reduce_one_element_list(td_dict_tmp)
         td.append(td_dict_tmp)
     
     print('DATA LOADED!')
@@ -184,7 +189,24 @@ def load_data_from_folder(folders, **kwargs):
 This function loads a file based on its format
 """ 
 def load_data_from_file(folder,file,file_format):
+    '''
+    This function loads the data from a file.
+
+    Parameters
+    ----------
+    folders : str
+        Path where to find the data.
+    files : str
+        Name of the file to load
+    files_format : str
+        Format of the data to collect.
     
+    Returns
+    -------
+    data : dict
+        Dictionary of the data contained in the file.
+
+    '''
     print('Opening file {}...'.format(os.path.join(folder,file)))
     if (file_format == folmat_type.ns3.value or file_format == folmat_type.ns6.value):
         # Open file
@@ -307,7 +329,6 @@ def process_mat_struct(key,val):
                 # break
                 tmp = process_mat_dict({'el':el})
                 tmp_dict[k][idx] = tmp['el']
-        
     else:
         raise Exception('ERROR: new data type in structure disassembling! Update the code...')
 
@@ -327,7 +348,6 @@ def process_mat_cell(key,val):
                 # break
                 tmp = process_mat_dict({'el':el})
                 tmp_dict[k][idx] = tmp['el']
-        
     else:
         raise Exception('ERROR: new data type in structure disassembling! Update the code...')
 
@@ -368,6 +388,37 @@ def process_mat_dict(td):
                 raise Exception('ERROR: mat type "{}" not implemented! Update the code...'.format(val.dtype.char))
     return td_out
 
+
+def reduce_one_element_list(_td):
+    '''
+    This function takes the loaded list of dictionaries and converts the list 
+    attributes of one element into that element.
+
+    Parameters
+    ----------
+    td : dict / list of dict
+        Trial(s) data.
+
+    Returns
+    -------
+    td : dict / list of dict
+        Trial(s) data.
+
+    '''
+    
+    if type(_td) is not dict:
+        raise Exception('ERROR: The type(td) must be a dict! It is a {}'.format(type(_td)))
+    
+    for k,v in _td.items():
+        if type(v) is list:
+            if len(v) == 1 and type(v[0]) is not dict:
+                _td[k] = v[0]
+            elif len(v) == 1 and type(v[0]) is dict:
+                _td[k] = reduce_one_element_list(v[0])
+        elif type(v) is dict:
+            _td[k] = reduce_one_element_list(v)
+    
+    return _td
 
 # def flatten_dict(td):
 #     # Stop field loop flag
