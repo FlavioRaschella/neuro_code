@@ -35,49 +35,6 @@ class event_linestyle(Enum):
     R = '-'
     L = '--'
 
-# def flatten_dict(td):
-#     # Stop field loop flag
-#     is_not_all_list = True
-                             
-#     # Loop over fields.                    
-#     while is_not_all_list:
-#         # Loop internal check over single field
-#         is_list = True
-#         # Extract only the requested fields
-#         for key, val in td.items():
-#             if '__' not in key:
-#                 # break
-#                 print(key, val.dtype.char); print(' ')
-#                 #  Check type of variable
-#                 if type(val) == str and key not in td_out.keys():
-#                     td_out[key] = val
-#                 elif type(val) == int and key not in td_out.keys():
-#                     td_out[key] = val
-#                 elif type(val) == float and key not in td_out.keys():
-#                     td_out[key] = val
-#                 elif type(val) == list and key not in td_out.keys():
-#                     td_out[key] = val
-#                 elif type(val) == np.ndarray:
-#                     val_red = reduce_mat_object(val)
-                    
-#                     if is_mat_struc(val_red):
-#                         for key_struct, val_struct in zip(val_red.dtype.names, val_red.item()):
-#                             val_struct_red = reduce_mat_object(val_struct)
-#                             if is_mat_struc(val_struct_red):
-#                                 # print(key_struct)
-#                                 is_list = False
-#                                 td_out[key + '_' + key_struct] = val_struct_red
-#                             else:
-#                                 td_out[key + '_' + key_struct] = reduce_list(np.ndarray.tolist(invert_to_column(val_struct_red)))
-#                     else:
-#                         td_out[key] = reduce_list(np.ndarray.tolist(invert_to_column(val_red)))
-#         if is_list:
-#             is_not_all_list = False
-#         else:
-#             # fields_name = td_out.keys()
-#             td = td_out.copy()
-#             td_out = {}
-
 # =============================================================================
 # Control fields
 # =============================================================================
@@ -576,7 +533,7 @@ def get_field(_td, _signals, save_signals_name = False):
     return td_out
 
 
-def extract_dicts(_td, fields, **kwargs):
+def extract_dicts(td, fields, **kwargs):
     """        
     This function extracts a dictionary containing only the fields in input.
     
@@ -588,8 +545,8 @@ def extract_dicts(_td, fields, **kwargs):
         Fields to combine in the new dict
     keep_name : str, optional
         Keep the name from the dict in the new keys (e.g. LFP: BIP1 --> LFP_BIP1). The default is True.
-    inplace : str, optional
-        Perform operation on the input data dict. The default is True.
+    all_layers : str, optional
+        Perform operation on all the dictionary layers. The default is False.
 
     Returns
     -------
@@ -599,22 +556,17 @@ def extract_dicts(_td, fields, **kwargs):
     """
     
     keep_name = True
-    inplace = True
+    all_layers = False
     
     # Check input variables
     for key,value in kwargs.items():
         if key == 'keep_name':
             keep_name = value
-        if key == 'inplace':
-            inplace = value
-    
-    if inplace:
-        td = _td
-    else:
-        td = _td.copy()
+        elif key == 'all_layers':
+            all_layers = value
     
     input_dict = False
-    if type(td) is dict:
+    if type(td) == dict:
         input_dict = True
         td = [td]
     
@@ -635,14 +587,23 @@ def extract_dicts(_td, fields, **kwargs):
                     dict2add = dict_new
                 combine_dicts(dict_tmp, dict2add, inplace = True)
             else:
-                raise Exception('ERROR: td[{}] is not a dict!'.format(field))
+                dict_tmp[field] = td_tmp[field]
+        
+        if all_layers:
+            all_layers_dict = dict_tmp.copy()
+            for k,v in all_layers_dict.items():
+                if type(v) is dict:
+                    in_layer_dict = extract_dicts(all_layers_dict, k, keep_name = keep_name, all_layers = all_layers)
+                    combine_dicts(dict_tmp, in_layer_dict, inplace = True)
+                    remove_fields(dict_tmp,k,exact_field = True, inplace = True)
+        
         td_out.append(dict_tmp)
-    
+        
+        
     if input_dict:
-        td = td_out[0]
-    
-    if not inplace:
-        return td_out
+        td_out = td_out[0]
+        
+    return td_out
 
 # =============================================================================
 # Plotting

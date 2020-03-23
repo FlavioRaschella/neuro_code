@@ -8,7 +8,8 @@ Created on Tue Feb 18 14:16:01 2020
 
 #%% Libraries
 # Import data loading, processing
-from td_utils import load_pipeline, cleaning_pipeline, preprocess_pipeline, td_plot
+from td_processing import load_pipeline, cleaning_pipeline, preprocess_pipeline
+from td_utils import td_plot
 
 #%% Load data
 DATA_PATH = ['/Volumes/MK_EPIOS/PD/from ED']

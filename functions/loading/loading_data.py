@@ -369,7 +369,7 @@ def process_mat_dict(td):
     td_out = {}
     for key, val in td.items():
         if '__' not in key:
-            # break; key = 'gait_time'; val = td[key]; key = 'fileComments'; val = td[key];            
+            # break; key = 'RFS'; val = td[key]; key = 'fileComments'; val = td[key];            
             # print(val.dtype.char)
             
             if val.dtype.char in ['U']: # String
@@ -378,14 +378,14 @@ def process_mat_dict(td):
                 td_out[key] = reduce_mat_array(val, 'B')
             elif val.dtype.char in ['H','u','i']: # int
                 td_out[key] = reduce_mat_array(val, 'H')
-            elif val.dtype.char in ['d']: # numpy.ndarray
+            elif val.dtype.char in ['d','l']: # numpy.ndarray
                 td_out[key] = reduce_mat_array(val,'d')
             elif val.dtype.char in ['V']: # struct
                 td_out[key] = process_mat_struct(key,val)
             elif val.dtype.char in ['O']: # cell
                 td_out[key] = process_mat_cell(key,val)
             else:
-                raise Exception('ERROR: mat type "{}" not implemented! Update the code...'.format(val.dtype.char))
+                raise Exception('ERROR: "{}" key value has mat type "{}" not implemented! Update the code...'.format(key, val.dtype.char))
     return td_out
 
 

@@ -30,9 +30,7 @@ def gait_event_manual(td, signals, events, **kwargs):
     ----------
     td : dict / list of dict
         trialData structure containing the relevant signals to display.
-    signal_to_use : str / list of str
-        Signals to display for marking the events.
-    signal_to_use : str / list of str
+    signals : str / list of str
         Signals to display for marking the events.
     signal_interval : int / float, optional
         Interval (in seconds) of signal to display in the plot. The default is 30 seconds.
@@ -302,9 +300,6 @@ def gait_event_manual(td, signals, events, **kwargs):
 #%% Main
 if __name__ == '__main__':
     print('WARNING: example not implemented!')
-    pass
-    
-    
     
 # EOF
     
