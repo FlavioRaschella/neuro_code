@@ -9,12 +9,24 @@ Created on Thu Jan 16 16:29:48 2020
 '''
 td is the trial data structure.
 The format of td is as following:
-    NAME keys : contain signals
+    NAME keys :  contain signals
     PARAMS key : contain trial data information
-        signals : name of the signals to be used for analysis
-        time : name of the signal containing time information
-        Fs : sampling frequency
-
+        folder : Name of the folder where the data are taken from
+        
+        file :   Name of the file where the data are taken from
+        
+        data :   Data_1  : signals : name of the signals to be used for analysis
+                           time : name of the signal containing time information
+                           fs : sampling frequency
+                 Data_n  : signals : name of the signals to be used for analysis
+                           time : name of the signal containing time information
+                           fs : sampling frequency         
+        
+        event :  Event_1 : signals : name of the signals to be used for analysis
+                           kind : saved in time or samples
+                 Event_n : signals : name of the signals to be used for analysis
+                           kind : saved in time or samples
+        
 '''
 
 # Plot library
@@ -224,40 +236,152 @@ def remove_all_fields_but(_td, _field, exact_field = False, inplace = True):
 # =============================================================================
 # Adding
 # =============================================================================
-def add_params(td, **kwargs):
+def add_params(_td, params, **kwargs):
     '''
     This function adds parameters to the trial data dictionary
 
     Parameters
     ----------
-    td : dict / list of dict
+    _td : dict / list of dict
         dict of trial data.
-    **kwargs : 
-        items to add to the td dict
+    params : dict
+        Params of the data. See below for examples
+    data_struct : str, optional
+        Type of _td struct in input. The default value is 'flat'.
+        Options:
+            flat (all data available on the first layer of the dict)
+            layer (data separated among inside layers of the dict)
         
     Returns
     -------
     td : dict / list of dict.
         dict of trial data.
+        
+    Examples for params in input:
+    params = {'Folder' : 'FOLDER_FIELD',
+              'File' : 'FILE_FIELD',
+              'Data':{'EMG': {'signals':['SIGNAL_1','...','SIGNAL_N'], 'Fs': 'FS_FIELD', 'time': 'TIME_FIELD'},
+                      'LFP': {'signals':['SIGNAL_1','...','SIGNAL_N'], 'Fs': 'FS_FIELD', 'time': 'TIME_FIELD'},
+                      'KIN': {'signals':['SIGNAL_1','...','SIGNAL_N'], 'Fs': 'FS_FIELD', 'time': 'TIME_FIELD'}}}
+    
+    params = {'Folder' : 'FOLDER_FIELD',
+              'File' : 'FILE_FIELD',
+              'Data': {'Data':{'signals':['SIGNAL_1','...','SIGNAL_N'], 'Fs': 'FS_FIELD', 'time': 'TIME_FIELD'}}}
     '''
+
+    data_struct = 'flat'
+    inplace = True
+    
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'data_struct':
+            data_struct = value
+        elif key == 'inplace':
+            inplace = value
+    
+    if data_struct not in ['flat','layer']:
+        raise Exception('ERROR: data_struct nor "flat", or "layer". It is: {}'.filename(data_struct))
+    
+    if inplace:
+        td = _td
+    else:
+        td = _td.copy()
     
     input_dict = False
     if type(td) == dict:
         input_dict = True
         td = [td]
-        
+    
     # Loop over the trials
     for td_tmp in td:
+        # Params initiation
         if 'params' not in td_tmp.keys():
-            td_tmp['params'] = {}
+            signals_2_use = ['params']
+            td_tmp['params'] = dict()
+            td_tmp['params']['Data'] = dict()
+            td_tmp['params']['Event'] = dict()
+        else:
+            signals_2_use = set(td_tmp.keys())
+            
         # Check input variables
-        for key,value in kwargs.items():
-            td_tmp['params'][key] = value
-
+        for key,val in params.items():
+            # key = 'EMG'; val = params[key];
+            if key in ['folder','file']:
+                td_tmp['params'][key] = td_tmp[val]
+            
+            elif key in ['Data']:
+                for ke,va in params['Data'].items():
+                    td_tmp['params']['Data'][ke] = dict()
+                    for k,v in va.items():
+                        # k = 'signals'; v = va[k];
+                        if k in ['signals']:
+                            td_tmp['params']['Data'][ke][k] = v
+                            if type(v) is list:
+                                signals_2_use.extend(v)
+                                if data_struct == 'layer': # place data on the main layer
+                                    for el in v:
+                                        td_tmp[el] = td_tmp[ke][el]
+                            elif type(v) is str:
+                                signals_2_use.append(v)
+                                if data_struct == 'layer': # place data on the main layer
+                                    td_tmp[v] = td_tmp[ke][v]
+                            else:
+                                raise Exception('ERROR: Value "{}" in params is nor str or list! It is {}...'.format(k,v))
+                        elif k in ['fs','time']:
+                            if data_struct == 'layer':
+                                val2take = td_tmp[ke][v]
+                                if type(val2take) is np.ndarray and val2take.size == 1:
+                                    val2take = val2take[0]
+                                td_tmp['params']['Data'][ke][k] = val2take
+                            elif data_struct == 'flat':
+                                val2take = td_tmp[v]
+                                if type(val2take) is np.ndarray and val2take.size == 1:
+                                    val2take = val2take[0]
+                                td_tmp['params']['Data'][ke][k] = val2take
+                        else:
+                            raise Exception('ERROR: Value in params dict "{}" is not "signal", "time", or "fs"! It is {}...'.format(k,v))
+                    
+                    # Check existance of 'fs' and 'time' data info
+                    keys_in_dict = set(td_tmp['params']['Data'][ke].keys())
+                    if 'fs' not in keys_in_dict and 'time' not in keys_in_dict:
+                        print('WARNING: neither time or fs are available for "{}"'.format(ke))
+                    elif 'fs' not in keys_in_dict and 'time' in keys_in_dict:
+                        td_tmp['params']['Data'][ke]['fs'] = 1/np.diff(td_tmp['params']['Data'][ke]['time'][:2])[0]
+                    elif 'fs' in keys_in_dict and 'time' not in keys_in_dict:
+                        fs = td_tmp['params']['Data'][ke]['fs']
+                        sign_len = np.max(td_tmp[td_tmp['params']['Data'][ke]['signals'][0]].shape)
+                        td_tmp['params']['Data'][ke]['time'] = np.linspace(0,sign_len/fs, sign_len)
+            
+            elif key in ['Event']:
+                for ke,va in params['Event'].items():
+                    td_tmp['params']['Event'][ke] = dict()
+                    for k,v in va.items():
+                        # k = 'signals'; v = va[k];
+                        if k in ['signals']:
+                            td_tmp['params']['Event'][ke][k] = v
+                            if type(v) is list:
+                                signals_2_use.extend(v)
+                                if data_struct == 'layer': # place data on the main layer
+                                    for el in v:
+                                        td_tmp[el] = td_tmp[ke][el]
+                            elif type(v) is str:
+                                signals_2_use.append(v)
+                                if data_struct == 'layer': # place data on the main layer
+                                    td_tmp[v] = td_tmp[ke][v]
+                            else:
+                                raise Exception('ERROR: Value "{}" in params is nor str or list! It is {}...'.format(k,v))
+                        elif k in ['kind']:
+                            td_tmp['params']['Event'][ke][k] = v
+                        else:
+                            raise Exception('ERROR: Value in params dict "{}" is not "signal", "time", or "fs"! It is {}...'.format(k,v))
+                            
+    remove_all_fields_but(td,flatten_list(set(signals_2_use)),exact_field = True, inplace = True)
+    
     if input_dict:
         td = td[0]
         
-    return td
+    if not inplace:
+        return td
 
 # CONSIDER REMOVING
 # def add_field_from_dict(_td, _dict, inplace = True, verbose = False):
