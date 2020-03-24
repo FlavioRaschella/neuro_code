@@ -18,12 +18,16 @@ def get_epochs(binary_array, Fs, verbose = False):
     signal_len = binary_array.shape[0]
     
     # Separate dataset in good epochs
-    good_start = np.where(np.logical_and(binary_array[:-1]==False ,binary_array[1:]==True))
-    if binary_array[0] == 1:
+    good_start = np.where(np.logical_and(binary_array[:-1]==False ,binary_array[1:]==True))[0]
+    if binary_array[0] == 1 and good_start.size == 0:
+        good_start = np.insert(good_start,0,0)
+    if binary_array[0] == 1 and good_start[0] != 0:
         good_start = np.insert(good_start,0,0)
         
-    good_stop = np.where(np.logical_and(binary_array[:-1]==True ,binary_array[1:]==False))
-    if binary_array[-1] == 1:
+    good_stop = np.where(np.logical_and(binary_array[:-1]==True ,binary_array[1:]==False))[0]
+    if binary_array[-1] == 1 and good_stop.size == 0:
+        good_stop = np.append(good_stop,signal_len)
+    if binary_array[-1] == 1 and good_stop[-1] != signal_len:
         good_stop = np.append(good_stop,signal_len)
     
     # Check that good_start and good_stop have same length
@@ -104,9 +108,10 @@ def artefacts_removal(data, Fs, method = 'amplitude', n = 1, threshold = None):
     for je in junk_end:
         bad_idx[je:je+junk_offset] = 1
     
+    # # Return good indexes
+    # return np.logical_not(bad_idx).astype('int')
     # Return good indexes
-    return np.logical_not(bad_idx).astype('int')
-            
+    return bad_idx
             
 def epochs_separation(data, good_epochs, Fs, print_figure = False):
     '''

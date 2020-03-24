@@ -13,8 +13,7 @@ import numpy as np
 from loading_data import load_data_from_folder
 
 # Td utils lib
-from td_utils import is_field, remove_fields, remove_all_fields_but
-from td_utils import combine_fields, combine_dicts, add_params
+from td_utils import *
 
 from utils import group_fields
 
@@ -59,7 +58,7 @@ def combine_epochs(td_1, td_2):
     
     return td_epoch
 
-def segment_data(_td, td_epoch):
+def segment_data(_td, td_epoch, Fs, **kwargs):
     '''
     This function segments the trial data in several blocks
 
@@ -68,6 +67,11 @@ def segment_data(_td, td_epoch):
     _td : dict / list of dict
         Trial data.
     td_epoch : dict / list of dict
+        Array of good epochs
+    Fs : int / float
+        Frequency of the signal
+    invert_epoch: str, optional
+        set whether invert the epoch values or not. The default value is False. 
 
     Returns
     -------
@@ -75,6 +79,14 @@ def segment_data(_td, td_epoch):
         Trial data.
 
     '''
+    
+    invert_epoch = False
+    
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'invert_epoch':
+            invert_epoch = value
+    
     td_out = []
     
     td = _td.copy()
@@ -86,8 +98,16 @@ def segment_data(_td, td_epoch):
     if len(td) != len(td_epoch):
         raise Exception('ERROR: td and td_segment must have the same length!')
     
+    if type(Fs) is str:
+        if '/' in Fs:
+            Fs = td_subfield(td[0],Fs)['fs']
+        else:
+            Fs = td[0][Fs]
+    
     for td_tmp, td_epo in zip(td, td_epoch):
-        epochs = get_epochs(td_epo['epochs'], td_tmp['params']['Fs'])
+        if invert_epoch:
+            td_epo['epochs'] = np.logical_not(td_epo['epochs']).astype('int')
+        epochs = get_epochs(td_epo['epochs'], Fs)
         for epoch in epochs:
             td_out_tmp = td_tmp.copy()
             for k,v in td_out_tmp.items():
@@ -129,6 +149,7 @@ def identify_artefacts(_td, **kwargs):
     threshold = None
     fields = None
     Fs = None
+    params = None
     
     # Check input variables
     for key,value in kwargs.items():
@@ -142,6 +163,8 @@ def identify_artefacts(_td, **kwargs):
             signal_n = value
         elif key == 'threshold':
             threshold = value
+        elif key == 'params':
+            params = value
         else:
             print('WARNING: key "{}" not recognised by the identify_artefacts function...'.format(key))
 
@@ -155,35 +178,41 @@ def identify_artefacts(_td, **kwargs):
     if type(td) is not list:
         raise Exception('ERROR: _td must be a list of dictionaries!')
     
-    # check string input variable
-    if fields != None:
-        if type(fields) is str:
-            fields = [fields]
-        if type(fields) is not list:
-            raise Exception('ERROR: _str must be a list of strings!')
-        if signal_n == None:
-            print('Number of signals with artefacts not specified. Setting to len(fields)-1 ...')
-            signal_n = len(fields)-1
+    if params != None:
+        subset = td_subfield(td[0],params)
+        if 'signals' in subset and 'fs' in subset:
+            fields = subset['signals']
+            Fs = subset['fs']
+        else:
+            raise Exception('ERROR: signals and/or fs are missing from the input subset "{}"'.format(subset))
         
+    # check string input variable
+    if fields == None:
+        raise Exception('ERROR: fields must be assigned!')
+    if Fs == None:
+        raise Exception('ERROR: fields must be assigned!')
+        
+    if type(fields) is str:
+        fields = [fields]
+    if type(fields) is not list:
+        raise Exception('ERROR: _str must be a list of strings!')
+            
+    if signal_n == None:
+        print('WARNING: Number of signals with artefacts not specified. Setting to len(fields)-1 ...')
+        signal_n = len(fields)-1
+    
     if method == None:
         method = 'amplitude'
-        print('Method for removing artifacts not specified: Selectd method is {}'.format(method))
+        print('WARNING: Method for removing artifacts not specified: Selectd method is {}'.format(method))
         
     td_artefacts = []
-    for td_tmp in td:
-        if fields == None:
-            fields = td_tmp['params']['signals']
-            if signal_n == None:
-                signal_n = len(fields)-1
-        if Fs == None:
-            Fs = td_tmp['params']['Fs']
-        
+    for td_tmp in td:        
         data = group_fields(td_tmp,fields)
         td_artefacts.append({'epochs':artefacts_removal(data, Fs, method, signal_n, threshold)})
     
     return td_artefacts
 
-def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_selected_fields = True, inplace = True):
+def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, inplace = True):
     '''
     This function converts the content of fields in a vector
 
@@ -195,8 +224,6 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_s
         Fields from which collect the data to convert.
     _vector_target_field : str
         Field with the name of the array in td to compare to _fields vectors
-    remove_selected_fields : bool, optional
-        Remove the fields before returning the dataset. The default is True.
     inplace : bool, optional
         Perform operation on the input data dict. The default is False.
 
@@ -237,12 +264,9 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, remove_s
     
     for td_tmp in td:
         vector_compare = np.array(td_tmp[_vector_target_field])
-        points = [np.array(td_tmp[field]) for field in _fields]
-        vector_target = convert_points_to_target_vector(points, vector_compare)
-        td_tmp['target'] = vector_target
-           
-    if remove_selected_fields:
-        remove_fields(td,_fields, exact_field = False, inplace = True)
+        for field in _fields:
+            points = np.array(td_tmp[field])
+            td_tmp[field] = convert_points_to_target_vector(points, vector_compare)
         
     if input_dict:
         td = td[0]
@@ -416,7 +440,7 @@ def compute_filter(_td, **kwargs):
 # Pipelines
 # =============================================================================
 
-def load_pipeline(data_path, data_files, data_format, **kwargs):
+def load_pipeline(**kwargs):
     '''
     This funtion loads and organises data from 
 
@@ -435,8 +459,9 @@ def load_pipeline(data_path, data_files, data_format, **kwargs):
         Trial data organised based on input requests.
 
     '''
-    
+        
     # Input variables
+    load_data_from_folder_dict = None
     target_load_dict = None
     remove_fields_dict = None
     remove_all_fields_but_dict = None
@@ -445,7 +470,9 @@ def load_pipeline(data_path, data_files, data_format, **kwargs):
     
     # Check input variables
     for key,value in kwargs.items():
-        if key == 'trigger_file':
+        if key == 'load':
+            load_data_from_folder_dict = value
+        elif key == 'trigger_file':
             target_load_dict = value
         elif key == 'remove_fields':
             remove_fields_dict = value
@@ -458,8 +485,11 @@ def load_pipeline(data_path, data_files, data_format, **kwargs):
             
     
     # Load data
-    td = load_data_from_folder(folder = data_path,file_num = data_files,file_format = data_format)
-
+    if load_data_from_folder_dict == None:
+        raise Exception('ERROR: Loading function not assigned!')
+    td = load_data_from_folder(folders = load_data_from_folder_dict['path'],**load_data_from_folder_dict)
+    td = extract_dicts(td, set(td[0].keys()), keep_name = True, all_layers = True)
+    
     if remove_fields_dict != None:
         remove_fields(td, remove_fields_dict['fields'], exact_field = False, inplace = True)
     
@@ -467,13 +497,10 @@ def load_pipeline(data_path, data_files, data_format, **kwargs):
         remove_all_fields_but(td, remove_all_fields_but_dict['fields'], exact_field = True, inplace = True)
     
     if target_load_dict != None:
-        options = remove_fields(target_load_dict, ['path', 'files', 'file_format'], exact_field = False, inplace = False)
-        td_target = load_data_from_folder(folder = target_load_dict['path'],
-                                          file_num = target_load_dict['files'],
-                                          file_format = target_load_dict['file_format'],
-                                          **options)
-        if 'fields' in options.keys():
-            remove_all_fields_but(td_target,options['fields'],False,True)
+        td_target = load_data_from_folder(folders = target_load_dict['path'],**target_load_dict)
+        td_target = extract_dicts(td_target, set(td_target[0].keys()), keep_name = True, all_layers = True)
+        if 'fields' in target_load_dict.keys():
+            remove_all_fields_but(td_target,target_load_dict['fields'],False,True)
     
         # Combine target data with the predictor data
         combine_dicts(td, td_target, inplace = True)
@@ -481,10 +508,10 @@ def load_pipeline(data_path, data_files, data_format, **kwargs):
     if convert_fields_to_numeric_array_dict != None:
         convert_fields_to_numeric_array(td, _fields = convert_fields_to_numeric_array_dict['fields'], 
                                         _vector_target_field = convert_fields_to_numeric_array_dict['target_vector'],
-                                        remove_selected_fields = True, inplace = True)    
+                                        inplace = True)    
     
     if params != None:
-        add_params(td, **params)
+        add_params(td, params)
     
     return td
     
@@ -549,7 +576,7 @@ def cleaning_pipeline(td, **kwargs):
         td_epoch = td_artefacts
     
     if remove_artefacts_dict != None or add_segmentation_dict != None:
-        td = segment_data(td, td_epoch)
+        td = segment_data(td, td_epoch, remove_artefacts_dict['params'], invert_epoch = True)
     
     return td
 

@@ -58,7 +58,7 @@ def is_field(_td, _fields, verbose = False):
     ----------
     _td : dict / list of dict
         dict of trial data.
-    _fields : string / list of strings
+    _fields : str / list of str
         Fields in the trial data dict.
     verbose : bool, optional
         Describe what's happening in the code. The default is False.
@@ -97,6 +97,37 @@ def is_field(_td, _fields, verbose = False):
                     print('Field {} not in dict #{}'.format(field, idx))
     
     return return_val
+
+def td_subfield(td, subfield):
+    '''
+    This function selects a hidden field in the td structure.
+
+    Parameters
+    ----------
+    td : dict / list of dict
+        dict of trial data.
+    subfield : str / list of str
+        Fields in the trial data dict.
+
+    Returns
+    -------
+    subfield_value : everything
+        The value in the pointed subfield
+
+    '''
+    
+    if type(td) is not dict:
+        raise Exception('ERROR: td must be a dict! It is a "{}"'.format(type(td)))
+        
+    if type(subfield) is not str:
+        raise Exception('ERROR: subfield must be a str! It is a "{}"'.format(type(subfield)))
+    
+    layers = subfield.split('/')
+    subfield_value = td.copy()
+    for layer in layers:
+        subfield_value = subfield_value[layer]
+    
+    return subfield_value
 
 # =============================================================================
 # Removing
@@ -376,7 +407,7 @@ def add_params(_td, params, **kwargs):
                             td_tmp['params']['event'][ke][k] = v
                         else:
                             raise Exception('ERROR: Value in params dict "{}" is not "signal", "time", or "fs"! It is {}...'.format(k,v))
-                            
+    
     remove_all_fields_but(td,flatten_list(set(signals_2_use)),exact_field = True, inplace = True)
     
     if input_dict:
@@ -469,7 +500,7 @@ def combine_fields(_td, _fields, **kwargs):
 
     method = 'subtract'
     remove_selected_fields = True
-    save_name_to_params = False
+    save_to_params = False
     inplace = True
 
     # Check input variables
@@ -478,8 +509,9 @@ def combine_fields(_td, _fields, **kwargs):
             method = value
         elif key == 'remove_selected_fields':
             remove_selected_fields = value
-        elif key == 'save_name_to_params':
-            save_name_to_params = value
+        elif key == 'save_to_params':
+            save_to_params = True
+            save_to_params_field = value
         elif key == 'inplace':
             inplace = value
 
@@ -511,6 +543,10 @@ def combine_fields(_td, _fields, **kwargs):
     if method not in ['subtract','multuply','divide','add']:
         raise Exception('ERROR: specified method has not been implemented!')
     
+    if save_to_params:
+        if save_to_params_field not in set(td[0]['params']['data'].keys()):
+            raise Exception('ERROR: field "{}" does not exist in params/data'.format(save_to_params_field))
+    
     for td_tmp in td:
         signals_name = []
         for field in _fields:
@@ -523,14 +559,17 @@ def combine_fields(_td, _fields, **kwargs):
             elif method == 'add':
                 signal_name = '{}+{}'.format(field[0],field[1])
                 td_tmp[signal_name] = add(td_tmp[field[0]],td_tmp[field[1]])
-            elif method == 'multuply':
+            elif method == 'multiply':
                 raise Exception('Method must be implemented!')
             elif method == 'divide':
                 raise Exception('Method must be implemented!')
             signals_name.append(signal_name)
             
-        if save_name_to_params:
-            td_tmp['params']['signals'] = signals_name
+        if save_to_params:
+            if remove_selected_fields:
+                td_tmp['params']['data'][save_to_params_field]['signals'] = signals_name
+            else:
+                td_tmp['params']['data'][save_to_params_field]['signals'].extend(signals_name)
     
     if remove_selected_fields:
         remove_fields(td,flatten_list(_fields), exact_field = True, inplace = inplace)
