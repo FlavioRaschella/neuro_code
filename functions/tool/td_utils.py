@@ -258,15 +258,15 @@ def add_params(_td, params, **kwargs):
         dict of trial data.
         
     Examples for params in input:
-    params = {'Folder' : 'FOLDER_FIELD',
-              'File' : 'FILE_FIELD',
-              'Data':{'EMG': {'signals':['SIGNAL_1','...','SIGNAL_N'], 'Fs': 'FS_FIELD', 'time': 'TIME_FIELD'},
+    params = {'folder' : 'FOLDER_FIELD',
+              'file' : 'FILE_FIELD',
+              'data':{'EMG': {'signals':['SIGNAL_1','...','SIGNAL_N'], 'Fs': 'FS_FIELD', 'time': 'TIME_FIELD'},
                       'LFP': {'signals':['SIGNAL_1','...','SIGNAL_N'], 'Fs': 'FS_FIELD', 'time': 'TIME_FIELD'},
                       'KIN': {'signals':['SIGNAL_1','...','SIGNAL_N'], 'Fs': 'FS_FIELD', 'time': 'TIME_FIELD'}}}
     
-    params = {'Folder' : 'FOLDER_FIELD',
-              'File' : 'FILE_FIELD',
-              'Data': {'Data':{'signals':['SIGNAL_1','...','SIGNAL_N'], 'Fs': 'FS_FIELD', 'time': 'TIME_FIELD'}}}
+    params = {'folder' : 'FOLDER_FIELD',
+              'file' : 'FILE_FIELD',
+              'data': {'Data':{'signals':['SIGNAL_1','...','SIGNAL_N'], 'Fs': 'FS_FIELD', 'time': 'TIME_FIELD'}}}
     '''
 
     data_struct = 'flat'
@@ -298,8 +298,8 @@ def add_params(_td, params, **kwargs):
         if 'params' not in td_tmp.keys():
             signals_2_use = ['params']
             td_tmp['params'] = dict()
-            td_tmp['params']['Data'] = dict()
-            td_tmp['params']['Event'] = dict()
+            td_tmp['params']['data'] = dict()
+            td_tmp['params']['event'] = dict()
         else:
             signals_2_use = set(td_tmp.keys())
             
@@ -309,13 +309,13 @@ def add_params(_td, params, **kwargs):
             if key in ['folder','file']:
                 td_tmp['params'][key] = td_tmp[val]
             
-            elif key in ['Data']:
-                for ke,va in params['Data'].items():
-                    td_tmp['params']['Data'][ke] = dict()
+            elif key in ['data']:
+                for ke,va in params['data'].items():
+                    td_tmp['params']['data'][ke] = dict()
                     for k,v in va.items():
                         # k = 'signals'; v = va[k];
-                        if k in ['signals']:
-                            td_tmp['params']['Data'][ke][k] = v
+                        if k in ['signals','time']:
+                            td_tmp['params']['data'][ke][k] = v
                             if type(v) is list:
                                 signals_2_use.extend(v)
                                 if data_struct == 'layer': # place data on the main layer
@@ -327,38 +327,40 @@ def add_params(_td, params, **kwargs):
                                     td_tmp[v] = td_tmp[ke][v]
                             else:
                                 raise Exception('ERROR: Value "{}" in params is nor str or list! It is {}...'.format(k,v))
-                        elif k in ['fs','time']:
+                        elif k in ['fs']:
                             if data_struct == 'layer':
                                 val2take = td_tmp[ke][v]
                                 if type(val2take) is np.ndarray and val2take.size == 1:
                                     val2take = val2take[0]
-                                td_tmp['params']['Data'][ke][k] = val2take
+                                td_tmp['params']['data'][ke][k] = val2take
                             elif data_struct == 'flat':
                                 val2take = td_tmp[v]
                                 if type(val2take) is np.ndarray and val2take.size == 1:
                                     val2take = val2take[0]
-                                td_tmp['params']['Data'][ke][k] = val2take
+                                td_tmp['params']['data'][ke][k] = val2take
                         else:
                             raise Exception('ERROR: Value in params dict "{}" is not "signal", "time", or "fs"! It is {}...'.format(k,v))
                     
                     # Check existance of 'fs' and 'time' data info
-                    keys_in_dict = set(td_tmp['params']['Data'][ke].keys())
+                    keys_in_dict = set(td_tmp['params']['data'][ke].keys())
                     if 'fs' not in keys_in_dict and 'time' not in keys_in_dict:
                         print('WARNING: neither time or fs are available for "{}"'.format(ke))
                     elif 'fs' not in keys_in_dict and 'time' in keys_in_dict:
-                        td_tmp['params']['Data'][ke]['fs'] = 1/np.diff(td_tmp['params']['Data'][ke]['time'][:2])[0]
+                        td_tmp['params']['data'][ke]['fs'] = 1/np.diff(td_tmp[td_tmp['params']['data'][ke]['time']][:2])[0]
                     elif 'fs' in keys_in_dict and 'time' not in keys_in_dict:
-                        fs = td_tmp['params']['Data'][ke]['fs']
-                        sign_len = np.max(td_tmp[td_tmp['params']['Data'][ke]['signals'][0]].shape)
-                        td_tmp['params']['Data'][ke]['time'] = np.linspace(0,sign_len/fs, sign_len)
+                        fs = td_tmp['params']['data'][ke]['fs']
+                        sign_len = np.max(td_tmp[td_tmp['params']['data'][ke]['signals'][0]].shape)
+                        td_tmp['params']['data'][ke]['time'] = ke + '_time'
+                        td_tmp[ke + '_time'] = np.linspace(0,sign_len/fs, sign_len)
+                        signals_2_use.append(ke + '_time')
             
-            elif key in ['Event']:
-                for ke,va in params['Event'].items():
-                    td_tmp['params']['Event'][ke] = dict()
+            elif key in ['event']:
+                for ke,va in params['event'].items():
+                    td_tmp['params']['event'][ke] = dict()
                     for k,v in va.items():
                         # k = 'signals'; v = va[k];
                         if k in ['signals']:
-                            td_tmp['params']['Event'][ke][k] = v
+                            td_tmp['params']['event'][ke][k] = v
                             if type(v) is list:
                                 signals_2_use.extend(v)
                                 if data_struct == 'layer': # place data on the main layer
@@ -371,7 +373,7 @@ def add_params(_td, params, **kwargs):
                             else:
                                 raise Exception('ERROR: Value "{}" in params is nor str or list! It is {}...'.format(k,v))
                         elif k in ['kind']:
-                            td_tmp['params']['Event'][ke][k] = v
+                            td_tmp['params']['event'][ke][k] = v
                         else:
                             raise Exception('ERROR: Value in params dict "{}" is not "signal", "time", or "fs"! It is {}...'.format(k,v))
                             
