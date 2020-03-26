@@ -36,7 +36,7 @@ from enum import Enum
 # Numpy library
 import numpy as np
 
-from utils import bipolar, add, flatten_list
+from utils import bipolar, add, flatten_list, transpose
 
 # Plotting events characteristics
 class event_color(Enum):
@@ -123,7 +123,7 @@ def td_subfield(td, subfield):
         raise Exception('ERROR: subfield must be a str! It is a "{}"'.format(type(subfield)))
     
     layers = subfield.split('/')
-    subfield_value = td.copy()
+    subfield_value = td
     for layer in layers:
         subfield_value = subfield_value[layer]
     
@@ -305,6 +305,7 @@ def add_params(_td, params, **kwargs):
     
     # Check input variables
     for key,value in kwargs.items():
+        key = key.lower()
         if key == 'data_struct':
             data_struct = value
         elif key == 'inplace':
@@ -486,7 +487,7 @@ def combine_fields(_td, _fields, **kwargs):
         Two fields to combine.
     method : str
         Method for combining the arrays. The default is subtract.
-    remove_selected_fields : bool, optional
+    remove_fields : bool, optional
         Remove the fields before returning the dataset. The default is True.
     inplace : bool, optional
         Perform operation on the input data dict. The default is False.
@@ -505,9 +506,10 @@ def combine_fields(_td, _fields, **kwargs):
 
     # Check input variables
     for key,value in kwargs.items():
+        key = key.lower()
         if key == 'method':
             method = value
-        elif key == 'remove_selected_fields':
+        elif key == 'remove_fields':
             remove_selected_fields = value
         elif key == 'save_to_params':
             save_to_params = True
@@ -544,8 +546,9 @@ def combine_fields(_td, _fields, **kwargs):
         raise Exception('ERROR: specified method has not been implemented!')
     
     if save_to_params:
-        if save_to_params_field not in set(td[0]['params']['data'].keys()):
-            raise Exception('ERROR: field "{}" does not exist in params/data'.format(save_to_params_field))
+        subfield = td_subfield(td[0],save_to_params_field)
+        if 'signals' not in set(subfield.keys()):
+            raise Exception('ERROR: field "signals" does not exist in "{}"'.format(save_to_params_field))
     
     for td_tmp in td:
         signals_name = []
@@ -566,10 +569,11 @@ def combine_fields(_td, _fields, **kwargs):
             signals_name.append(signal_name)
             
         if save_to_params:
+            subfield = td_subfield(td_tmp,save_to_params_field)
             if remove_selected_fields:
-                td_tmp['params']['data'][save_to_params_field]['signals'] = signals_name
+                subfield['signals'] = signals_name
             else:
-                td_tmp['params']['data'][save_to_params_field]['signals'].extend(signals_name)
+                subfield['signals'].extend(signals_name)
     
     if remove_selected_fields:
         remove_fields(td,flatten_list(_fields), exact_field = True, inplace = inplace)
@@ -725,6 +729,7 @@ def extract_dicts(td, fields, **kwargs):
     
     # Check input variables
     for key,value in kwargs.items():
+        key = key.lower()
         if key == 'keep_name':
             keep_name = value
         elif key == 'all_layers':
@@ -795,6 +800,8 @@ def td_plot(td, y, **kwargs):
         x min and max.
     ylim : tuple
         y min and max.
+    kind: str
+        Set kind of input signal: '1d','2d'. The default value is '1d'.
     save : bool
         Flag for saving the figure.
 
@@ -814,6 +821,7 @@ def td_plot(td, y, **kwargs):
     xlabel = None
     colours = None
     grid_plot = True
+    kind = '1d'
     axs_external = []
     maximise = False
     save_figure = False
@@ -821,6 +829,7 @@ def td_plot(td, y, **kwargs):
     
     # Check input variables
     for key,value in kwargs.items():
+        key = key.lower()
         if key == 'events':
             events = value
         elif key == 'subplot':
@@ -841,6 +850,8 @@ def td_plot(td, y, **kwargs):
             ylim = value
         elif key == 'xlim':
             xlim = value
+        elif key == 'kind':
+            kind = value.lower()
         elif key == 'colours':
             colours = value
         elif key == 'maximise':
@@ -890,7 +901,7 @@ def td_plot(td, y, **kwargs):
     else:
         axs = axs_external
     
-    if len(axs) != len(y):
+    if subplot[0]*subplot[1] != len(y):
         raise Exception('ERROR: axs and y have different length: axs: {} != y: {}'.format(len(axs),len(y)))
     
     # Create figure
@@ -927,15 +938,14 @@ def td_plot(td, y, **kwargs):
         c_list = colours
     
     # print(x_list,'\n',y,'\n',axs,'\n',c_list)
-    
     for x_ax, signal, ax, col in zip(x_list, y, axs, c_list):
-        
+        # print(x_ax,'\n',signal,'\n',ax,'\n',col)
         # Set plot title
-        # print(signal)
         if type(signal) is list:
             signal_name = ' + '.join(signal)
         else:
             signal_name = signal
+            signal = [signal]
                 
         ax.set_title(signal_name)
         
@@ -944,21 +954,22 @@ def td_plot(td, y, **kwargs):
             ax.set_xlabel('')
         if ylabel != '':
             ax.set_ylabel('')
-        
+                
+        signal_dim = td[signal[0]].ndim
+            
         # Set axes limits
         if ylim != None:
             ax.set_ylim(ylim)
         else:
-            if type(signal) is list:
+            if kind == '1d':
                 ylim_tmp = [+np.inf, -np.inf]
                 for sig in signal:
-                    if min(td[sig]) < ylim_tmp[0]:
-                        ylim_tmp[0] = min(td[sig])
-                    if max(td[sig]) > ylim_tmp[1]:
-                        ylim_tmp[1] = max(td[sig])
-            else:
-                ylim_tmp = tuple([min(td[signal]), max(td[signal])])
-            ax.set_ylim(ylim_tmp)
+                    sig_tmp = transpose(td[sig],'column')
+                    if np.min(sig_tmp) < ylim_tmp[0]:
+                        ylim_tmp[0] = np.min(td[sig])
+                    if np.max(sig_tmp) > ylim_tmp[1]:
+                        ylim_tmp[1] = np.max(td[sig])
+                ax.set_ylim(ylim_tmp)
         if xlim != None:
             ax.set_xlim(xlim)
         
@@ -966,29 +977,35 @@ def td_plot(td, y, **kwargs):
         ax.grid(grid_plot)
         
         # Plot signal
-        if type(signal) is list:
-            for sig, c in zip(signal, col):
-                if x_ax == None:
-                    if c == None:
+        # if type(signal) is list:
+        for sig, c in zip(signal, col):
+            if x_ax == None:
+                if c == None:
+                    if kind == '1d':
                         ax.plot(td[sig])
                     else:
-                        ax.plot(td[sig],color = c)
+                        ax.imshow(td[sig], extent=[0, 1, 0, 1])
                 else:
-                    if c == None:
+                    ax.plot(td[sig],color = c)
+            else:
+                if c == None:
+                    if kind == '1d':
                         ax.plot(td[x_ax],td[sig])
                     else:
-                        ax.plot(td[x_ax],td[sig],color = c)
-        else:
-            if x_ax == None:
-                if col[0] == None:
-                    ax.plot(td[signal])
+                        ax.imshow(td[sig], extent=[0, 1, 0, 1])
                 else:
-                    ax.plot(td[signal],color = col)
-            else:
-                if col[0] == None:
-                    ax.plot(td[x_ax],td[signal])
-                else:
-                    ax.plot(td[x_ax],td[signal],color = col)
+                    ax.plot(td[x_ax],td[sig],color = c)
+        # else:
+        #     if x_ax == None:
+        #         if col[0] == None:
+        #             ax.plot(td[signal])
+        #         else:
+        #             ax.plot(td[signal],color = col)
+        #     else:
+        #         if col[0] == None:
+        #             ax.plot(td[x_ax],td[signal])
+        #         else:
+        #             ax.plot(td[x_ax],td[signal],color = col)
         
         # Plot gait events
         if events != None:

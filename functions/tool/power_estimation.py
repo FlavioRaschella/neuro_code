@@ -10,6 +10,7 @@ from scipy.signal import hilbert
 from scipy.signal.windows import dpss
 import math
 import numpy as np
+from utils import transpose
 
 # Extract signal power from Hilber transformation
 def hilbert_transform(data):
@@ -110,7 +111,7 @@ def moving_pmtm(data, Fs, win_size, win_step, freq_range, NW=None, NFFT=None, ve
     if verbose:
         display_spectrogram_params(NW, win_size, win_step, tapers_n, df, Fs)
         
-    return pow2db(np.flip(mt_spectrogram.T)), sfreqs, stimes
+    return transpose(pow2db(np.flip(mt_spectrogram.T)),'column'), sfreqs, stimes
     
     
     

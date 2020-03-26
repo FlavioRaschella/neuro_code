@@ -9,8 +9,9 @@ Created on Thu Feb 20 10:57:11 2020
 import numpy as np
 import pickle
 import os
+import copy
 
-def group_fields(_dict, _fields):
+def group_fields(_dict, _fields, direction = 'column'):
     '''
     This function groups the data in the fields of a dict
 
@@ -39,9 +40,44 @@ def group_fields(_dict, _fields):
     if (np.diff(fields_len) > 0.1).any():
         raise Exception('ERROR: signals have different length!')
     
-    data = np.array([_dict[field] for field in _fields])
+    data = transpose(np.array([_dict[field] for field in _fields]), direction)
     
     return data
+
+def convert_list_to_array(data_list, axis = 1):
+    '''
+    This function converts data in a list to np.array
+
+    Parameters
+    ----------
+    data_list : list
+        List of np.array signals with different dimensions.
+
+    Returns
+    -------
+    data : np.ndarray
+        Data containing the concatenated signals.
+
+    '''
+    
+    data_out = []
+    if type(data_list) is not list:
+        raise Exception('ERROR: data_list input must be a list!')
+        
+    for iEl, el in enumerate(data_list):
+        if type(el) != np.ndarray:
+            raise Exception('ERROR: list elements must be np.ndarray!')
+        else:
+            if el.ndim == 1:
+                el = el.reshape((el.shape[0],1))
+            data_out.append(transpose(el, 'column'))
+    
+    # Check that signal in fields have the same length
+    data_out_n = [dl.shape[0] for dl in data_out]
+    if (np.diff(data_out_n) > 0.1).any():
+        raise Exception('ERROR: data_list have different length!')
+    
+    return np.concatenate(data_out, axis = axis)
 
 def flatten_list(_list, _tranform_to_array = False, unique = True):
     '''
@@ -212,6 +248,33 @@ def find_first(point, vector):
     return point_idx
 
 
+def find_values(array, value = 1):
+    '''
+    This functions returns all indexes where an array has a certain value
+
+    Parameters
+    ----------
+    array : np.ndarray / list
+        Array of value.
+    value : int, optional
+        Value to look for in the array. The default is 1.
+
+    Returns
+    -------
+    array
+        Array of indexes.
+
+    '''
+
+    if type(array) is not list and type(array) is not np.ndarray:
+        raise Exception('ERROR: array input must be either a list or a np.ndarray')
+        
+    if type(array) is list:
+        array = np.array(array)
+        
+    return np.where(array == value)[0]
+    
+
 def euclidean_distance(array1, array2):
     '''
     This function computes the euclidean distance between 2 points
@@ -274,16 +337,54 @@ def transpose(array, direction = 'column'):
     if type(array) is not np.ndarray:
         raise Exception('ERROR: array in input is not list or np.ndarray!')
     
-    if direction == 'column':
+    if direction == 'column' and array.ndim>1:
         if array.shape[0]<array.shape[1]:
             array = array.T
             
-    if direction == 'row':
+    if direction == 'row' and array.ndim>1:
         if array.shape[0]>array.shape[1]:
             array = array.T
             
     return array
+  
+
+def copy_dict(_dict):
+    '''
+    This function copies the content of a list in another list, without referencing.
+
+    Parameters
+    ----------
+    _dict : dict / list of _dict
+        List of dictionaries.
+
+    Returns
+    -------
+    dict_copy : list
+        Copy of the list in input.
+
+    '''
     
+    input_dict = False
+    if type(_dict) is dict:
+        input_dict = True
+        _dict = [_dict]
+    
+    if type(_dict) is not list:
+        raise Exception('ERROR: list is input is not a list, but {}!'.format(type(_dict)))
+        
+    for element in _dict:
+        if type(element) is not dict:
+            raise Exception('ERROR: element in input list is not a list, but {}!'.format(type(element)))
+            
+    # Create copy list
+    dict_copy = []
+    for element in _dict:
+        dict_copy.append(copy.deepcopy(element))
+    
+    if input_dict:
+        dict_copy = dict_copy[0]
+    
+    return dict_copy
 
 def open_figures_pickle(folder):
     '''

@@ -8,7 +8,7 @@ Created on Mon Feb  3 14:29:32 2020
 This library contains filter for signal processing
 """
 
-from scipy.signal import butter, lfilter, filtfilt, detrend, hilbert, decimate
+from scipy.signal import butter, lfilter, filtfilt, detrend, hilbert, decimate, savgol_filter
 import numpy as np
 
 # Design filter
@@ -62,6 +62,10 @@ def butter_highpass_filtfilt(data, highcut, fs, order=5):
     b, a = butter_highpass(highcut, fs, order=order)
     y = filtfilt(b, a, data)
     return y
+
+def sgolay_filter(data, win_len, order=5):
+    return data - savgol_filter(x = data, window_length = win_len, polyorder = order)
+
 
 # Moving average
 def average(data, periods):
