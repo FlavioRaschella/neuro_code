@@ -248,7 +248,7 @@ def find_first(point, vector):
     return point_idx
 
 
-def find_values(array, value = 1):
+def find_values(array, value = 1, method = 'equal'):
     '''
     This functions returns all indexes where an array has a certain value
 
@@ -258,6 +258,8 @@ def find_values(array, value = 1):
         Array of value.
     value : int, optional
         Value to look for in the array. The default is 1.
+    method : str
+        Find values "equal" (=), "bigger" (>),  "smaller" (<).
 
     Returns
     -------
@@ -271,8 +273,15 @@ def find_values(array, value = 1):
         
     if type(array) is list:
         array = np.array(array)
-        
-    return np.where(array == value)[0]
+    
+    if method == 'equal':
+        array = np.where(array == value)[0]
+    if method == 'bigger':
+        array = np.where(array > value)[0]
+    if method == 'smaller':
+        array = np.where(array < value)[0]
+    
+    return array
     
 
 def euclidean_distance(array1, array2):

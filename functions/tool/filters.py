@@ -8,8 +8,9 @@ Created on Mon Feb  3 14:29:32 2020
 This library contains filter for signal processing
 """
 
-from scipy.signal import butter, lfilter, filtfilt, detrend, hilbert, decimate, savgol_filter
 import numpy as np
+from scipy.signal import butter, lfilter, filtfilt, detrend, hilbert, decimate, savgol_filter
+from utils import transpose
 
 # Design filter
 def butter_bandpass(lowcut, highcut, fs, order=5):
@@ -162,20 +163,37 @@ def envelope(data, Fs, lowcut = 0, highcut = 0, method = 'squared', order = 4):
 
 # Downsample dataset
 def downsample_signal(data, fs, target_fs):
-    decimation_ratio = np.round(fs / target_fs)
-    offset = np.ceil(140. / decimation_ratio) * decimation_ratio
-    start_pad = data[0] * np.ones(int(offset), dtype=np.float32)
-    end_pad = data[-1] * np.ones(int(offset), dtype=np.float32)
-    data = np.concatenate((start_pad, data, end_pad), axis=0)
+    '''
+    This function downsamples the data in input
 
+    Parameters
+    ----------
+    data : np.ndarray
+        Data to downsample.
+    fs : int / float
+        Sampling frequency of the data.
+    target_fs : int / float
+        Target sampling frequency of the data.
+
+    Returns
+    -------
+    y : np.ndarray
+        Downsampled data.
+    actual_fs : int
+        Actual sample frequency.
+
+    '''
+    
+    decimation_ratio = np.round(fs / target_fs).astype('int')
+        
+    data = transpose(data,'row')
     if fs < target_fs:
         raise ValueError("ERROR: fs < target_fs")
     else:
         try:
-            y0 = decimate(data, int(decimation_ratio), 3, zero_phase=True)
+            y = decimate(data, decimation_ratio, 3, zero_phase=True)
         except:
-            y0 = decimate(data, int(decimation_ratio), 3)
+            y = decimate(data, decimation_ratio, 3)
         actual_fs = fs / decimation_ratio
-        y = y0[int(offset / decimation_ratio):-int(offset / decimation_ratio)]
-    y = y - np.mean(y)
-    return y, actual_fs 
+                
+    return transpose(y,'column'), actual_fs 

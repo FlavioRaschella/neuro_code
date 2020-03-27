@@ -35,9 +35,13 @@ CLEANING_OPT = {'combine_fields': {'fields': CHANNELS, 'method': 'subtract', 're
 td = cleaning_pipeline(td,**CLEANING_OPT)
 
 #%% PREPROCESS DATA
-PREPROCESS_OPT = {'multitaper': {'fields': 'params/data/data', 'fs': 'params/data/data', 'wind_size': 0.25,'wind_step': 0.01, 'freq_start': 10, 'freq_stop': 100, 'NW': 4, 'adjust_target': 'params/event', 'inplace': False}}
+# PREPROCESS_OPT = {'multitaper': {'fields': 'params/data/data', 'fs': 'params/data/data', 'wind_size': 0.25,'wind_step': 0.01, 'freq_start': 10, 'freq_stop': 100, 'NW': 4, 'adjust_target': 'params/event', 'inplace': False}}
 # PREPROCESS_OPT = {'filter': {'kind': 'bandpass', 'fields': 'params/data/data', 'fs': 'params/data/data', 'f_min' : 50, 'f_max': 100, 'order':3}}
 # PREPROCESS_OPT = {'filter': {'kind': 'sgolay', 'fields': 'params/data/data', 'fs': 'params/data/data', 'win_len': '3fs'}}
+
+PREPROCESS_OPT = {'downsample': {'fields': 'params/data/data', 'fs': 'params/data/data', 
+                                 'field_time': 'params/data/data', 'fs_down': 2000, 'adjust_target': 'params/event',
+                                 'inplace': False, 'verbose': True}}
 
 td_out = preprocess_pipeline(td,**PREPROCESS_OPT)
 
@@ -55,7 +59,6 @@ FEATURES_OPT = {'event_instant': {'fields': fields, 'event_fields': event_fields
                                   'no_event_sec': no_event_sec}}
 
 td_features = features_pipeline(td_out,**FEATURES_OPT)
-
 
 #%% DECODER
 CLASSIFIER =    {'selected': 'RF', \

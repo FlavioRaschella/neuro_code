@@ -16,14 +16,14 @@ from loading_data import load_data_from_folder
 from td_utils import is_field, combine_fields, combine_dicts, td_subfield, extract_dicts
 from td_utils import remove_fields, remove_all_fields_but, add_params
 
-from utils import group_fields, convert_list_to_array, copy_dict, flatten_list
+from utils import group_fields, convert_list_to_array, copy_dict, flatten_list, find_values, find_first
 
 # Processing libs
 from processing import artefacts_removal, convert_points_to_target_vector, get_epochs
 
 from power_estimation import moving_pmtm
 
-from filters import sgolay_filter
+from filters import sgolay_filter, downsample_signal
 from filters import butter_bandpass_filtfilt as bpff
 from filters import butter_lowpass_filtfilt as lpff
 from filters import butter_highpass_filtfilt as hpff
@@ -94,7 +94,7 @@ def segment_data(_td, td_epoch, fs, **kwargs):
     
     td_out = []
     
-    td = _td.copy()
+    td = copy_dict(_td)
     
     # check dict input variable
     if type(td) is dict:
@@ -172,7 +172,7 @@ def identify_artefacts(_td, **kwargs):
             print('WARNING: key "{}" not recognised by the identify_artefacts function...'.format(key))
 
     # Get a temporary copy of td
-    td = _td.copy()
+    td = copy_dict(_td)
 
     # check dict input variable
     if type(td) is dict:
@@ -241,7 +241,7 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, inplace 
     if inplace:
         td = _td
     else:
-        td = _td.copy()
+        td = copy_dict(_td)
 
     # check dict input variable
     input_dict = False
@@ -282,7 +282,151 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, inplace 
 # =============================================================================
 # Preprocessing functions
 # =============================================================================
+
+def downsample(_td, **kwargs):
     
+    fields = None
+    fields_string = ''
+    field_time = None
+    fs = None
+    fs_down = None
+    inplace = True
+    verbose = False
+    adjust_target = False
+
+    # Check input variables
+    for key,value in kwargs.items():
+        key = key.lower()
+        if key == 'fields':
+            fields = value
+        elif key == 'fs':
+            fs = value
+        elif key == 'field_time':
+            field_time = value
+        elif key == 'fs_down':
+            fs_down = value
+        elif key == 'inplace':
+            inplace = value
+        elif key == 'verbose':
+            verbose = value
+        elif key == 'adjust_target':
+            adjust_target = True
+            adjust_target_field = value
+        else:
+            print('WARNING: key "{}" not recognised by the compute_multitaper function...'.format(key))
+    
+    if inplace:
+        td = _td
+    else:
+        td = copy_dict(_td)
+    
+    # Check input values
+    input_dict = False
+    if type(td) is dict:
+        input_dict = True
+        td = [td]
+    
+    if type(td) is not list:
+        raise Exception('ERROR: _td must be a list of dictionaries!')
+    if fields == None:
+        raise Exception('ERROR: fields must be assigned!')
+    if fs == None:
+        raise Exception('ERROR: fs must be assigned!')
+    if fs_down == None:
+        raise Exception('ERROR: fs_down must be assigned!')
+
+    # Check fields        
+    if type(fields) is str:
+        if '/' in fields:
+            fields_string = fields
+            fields = td_subfield(td[0],fields)['signals']
+        else:
+            fields = [fields]
+    if type(fields) is not list:
+        raise Exception('ERROR: fields must be a list of strings!')
+        
+    if not is_field(td,fields):
+        raise Exception('ERROR: fields is not in td!')
+    
+    # Check fs 
+    if type(fs) is str:
+        if '/' in fs:
+            fs = td_subfield(td[0],fs)['fs']
+        else:
+            fs = td[0][fs]
+            
+    # Check fs_down 
+    if type(fs_down) is str:
+        fs_down = td[0][fs_down]
+    elif type(fs_down) is int or type(fs_down) is int:
+        pass
+    else:
+        raise Exception('ERROR: fs_down must be a int / float / str!')
+
+    # Check field_time 
+    if field_time != None and type(field_time) is str:
+        if '/' in field_time:
+            field_time = td_subfield(td[0],field_time)['time']
+        
+    if not is_field(td,field_time):
+        raise Exception('ERROR: field_time is not in td!')
+
+    if adjust_target and field_time != None:
+        if type(adjust_target_field) is str:
+            if '/' in adjust_target_field:
+                target_fields = []
+                target_subfields = td_subfield(td[0],adjust_target_field)
+                for event, value in target_subfields.items():
+                    target_fields.append(value['signals'])
+            else:
+                target_fields = [adjust_target_field]
+            target_fields = flatten_list(target_fields)
+        if type(target_fields) is not list:
+            raise Exception('ERROR: fields must be a list of strings!')
+            
+        if not is_field(td,target_fields):
+            raise Exception('ERROR: target_fields is not in td!')
+    else:
+        raise Exception('ERROR: "adjust_target" works only if "field_time" is not None!')
+
+    # Downsample signals
+    for iTd, td_tmp in enumerate(td):
+        # Downsample target dataset as well
+        if adjust_target:
+            time_down,_ = downsample_signal(td_tmp[field_time], fs, fs_down)
+            for iEv, event in enumerate(target_fields):
+                if verbose: print('Downsampling event {}/{} in td {}/{}'.format(iEv+1,len(target_fields),iTd+1,len(td)))
+                target_new = np.zeros(len(time_down),int)
+                events_n = np.unique(td_tmp[event])[1:]
+                for ev in events_n:
+                    event_time = td_tmp[field_time][find_values(td_tmp[event],ev,'equal')]
+                    event_idx = []
+                    for ev_idx in event_time:
+                        event_idx.append(find_first(ev_idx,time_down))
+                
+                    target_new[event_idx] = ev
+                # Create new event signal
+                td_tmp[event] = target_new
+        
+        # Downsample time field
+        if field_time != None:
+            td_tmp[field_time],_ = downsample_signal(td_tmp[field_time], fs, fs_down)
+
+        # Downsample fields
+        for iFld, field in enumerate(fields):
+            if verbose: print('Downsampling field {}/{} in td {}/{}'.format(iFld+1,len(fields),iTd+1,len(td)))
+            td_tmp[field],fs_new = downsample_signal(td_tmp[field], fs, fs_down)
+            
+            # Update frequency info in params
+            if fields_string != '':
+                subfields = td_subfield(td[0],fields_string)
+                subfields['fs'] = fs_new
+            
+    if input_dict:
+        td = td[0]
+    
+    return td
+
 def compute_multitaper(_td, **kwargs):
     '''
     This function compute the multitapers spectal analysis for the td signals
@@ -479,7 +623,7 @@ def compute_filter(_td, **kwargs):
     if inplace:
         td = _td
     else:
-        td = _td.copy()
+        td = copy_dict(_td)
     
     # Check input values
     input_dict = False
@@ -916,6 +1060,8 @@ def preprocess_pipeline(td, **kwargs):
             operations.append((key,value))
         elif key == 'multitaper':
             operations.append((key,value))
+        elif key == 'downsample':
+            operations.append((key,value))
         else:
             print('WARNING: key "{}" not recognised by the preprocess pipeline...'.format(key))
     
@@ -924,6 +1070,8 @@ def preprocess_pipeline(td, **kwargs):
             td = compute_filter(td, **operation[1])
         elif operation[0] == 'multitaper':
             td = compute_multitaper(td, **operation[1])
+        elif operation[0] == 'downsample':
+            td = downsample(td, **operation[1])
     
     return td
 
