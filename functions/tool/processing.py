@@ -253,7 +253,7 @@ def interpolate1D(array, length_new, kind = 'linear'):
     Array_new.
 
     '''
-    f = interpolate.interp1d(np.arange(len(array)), array, kind = 'linear', fill_value = 'extrapolate')
+    f = interpolate.interp1d(np.arange(len(array)), array, kind = kind, fill_value = 'extrapolate')
     return f(np.linspace(0,len(array),length_new))
     
 

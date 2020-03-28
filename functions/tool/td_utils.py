@@ -626,8 +626,7 @@ def combine_dicts(_td, _td2copy, inplace = True):
     else:
         td = copy_dict(_td)
     
-    td2copy = _td2copy.copy()
-    
+    td2copy = copy_dict(_td2copy)
     
     input_dict = False
     if type(td) is dict:
@@ -1024,6 +1023,10 @@ def td_plot(td, y, **kwargs):
             fig, axs = plt.subplots(nrows = subplot[0], ncols = subplot[1], sharex=True)
     else:
         axs = axs_external
+        if axs.ndim == 1:
+            subplot = (axs.shape[0],1)
+        else:
+            subplot = axs.shape
     
     if subplot[0]*subplot[1] != len(y):
         raise Exception('ERROR: axs and y have different length: axs: {} != y: {}'.format(len(axs),len(y)))
@@ -1086,7 +1089,11 @@ def td_plot(td, y, **kwargs):
             ax.set_ylim(ylim)
         else:
             if kind == '1d':
-                ylim_tmp = [+np.inf, -np.inf]
+                if ax.get_ylim() == (0,1):
+                    ylim_tmp = [+np.inf, -np.inf]
+                else:
+                    ylim_tmp = list(ax.get_ylim())
+                    
                 for sig in signal:
                     sig_tmp = transpose(td[sig],'column')
                     if np.min(sig_tmp) < ylim_tmp[0]:
@@ -1094,6 +1101,8 @@ def td_plot(td, y, **kwargs):
                     if np.max(sig_tmp) > ylim_tmp[1]:
                         ylim_tmp[1] = np.max(td[sig])
                 ax.set_ylim(ylim_tmp)
+            elif kind == '2d':
+                print('WARNINIG: management of y axis for the 2d plot still not implemented! Sorry...')
         if xlim != None:
             ax.set_xlim(xlim)
         
