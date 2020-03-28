@@ -29,14 +29,28 @@ The format of td is as following:
         
 '''
 
-# Plot library
+'''
+There are several method categories:
+    - Control fields
+    - Removing
+    - Adding
+    - Combining
+    - Separating
+    - Extracting
+    - Plotting
+'''
+
+
+# Numpy lib
+import numpy as np
+# Plot lib
 import matplotlib.pyplot as plt
 # Enumerator library
 from enum import Enum
-# Numpy library
-import numpy as np
+# Import utilities
+from utils import bipolar, add, flatten_list, transpose, copy_dict
 
-from utils import bipolar, add, flatten_list, transpose
+import copy
 
 # Plotting events characteristics
 class event_color(Enum):
@@ -157,7 +171,7 @@ def remove_fields(_td, _field, exact_field = False, inplace = True):
     if inplace:
         td = _td
     else:
-        td = _td.copy()
+        td = copy_dict(_td)
     
     # check dict input variable
     input_dict = False
@@ -223,7 +237,7 @@ def remove_all_fields_but(_td, _field, exact_field = False, inplace = True):
     if inplace:
         td = _td
     else:
-        td = _td.copy()
+        td = copy_dict(_td)
     
     # check dict input variable
     input_dict = False
@@ -317,7 +331,7 @@ def add_params(_td, params, **kwargs):
     if inplace:
         td = _td
     else:
-        td = _td.copy()
+        td = copy_dict(_td)
     
     input_dict = False
     if type(td) == dict:
@@ -334,15 +348,17 @@ def add_params(_td, params, **kwargs):
             td_tmp['params']['event'] = dict()
         else:
             signals_2_use = set(td_tmp.keys())
-            
+            params = td_tmp['params']
+        
+        params_c = copy.deepcopy(params)
         # Check input variables
-        for key,val in params.items():
+        for key,val in params_c.items():
             # key = 'EMG'; val = params[key];
             if key in ['folder','file']:
                 td_tmp['params'][key] = td_tmp[val]
             
             elif key in ['data']:
-                for ke,va in params['data'].items():
+                for ke,va in val.items():
                     td_tmp['params']['data'][ke] = dict()
                     for k,v in va.items():
                         # k = 'signals'; v = va[k];
@@ -387,7 +403,7 @@ def add_params(_td, params, **kwargs):
                         signals_2_use.append(ke + '_time')
             
             elif key in ['event']:
-                for ke,va in params['event'].items():
+                for ke,va in val.items():
                     td_tmp['params']['event'][ke] = dict()
                     for k,v in va.items():
                         # k = 'signals'; v = va[k];
@@ -443,7 +459,7 @@ def add_params(_td, params, **kwargs):
 #     if inplace:
 #         td = _td
 #     else:
-#         td = _td.copy()
+        # td = copy_dict(_td)
     
 #     input_dict = False
 #     # check dict input variable
@@ -473,7 +489,7 @@ def add_params(_td, params, **kwargs):
 #         return td
 
 # =============================================================================
-# Combine
+# Combining
 # =============================================================================
 def combine_fields(_td, _fields, **kwargs):
     '''
@@ -520,7 +536,7 @@ def combine_fields(_td, _fields, **kwargs):
     if inplace:
         td = _td
     else:
-        td = _td.copy()
+        td = copy_dict(_td)
 
     # check dict input variable
     input_dict = False
@@ -608,7 +624,7 @@ def combine_dicts(_td, _td2copy, inplace = True):
     if inplace:
         td = _td
     else:
-        td = _td.copy()
+        td = copy_dict(_td)
     
     td2copy = _td2copy.copy()
     
@@ -637,7 +653,115 @@ def combine_dicts(_td, _td2copy, inplace = True):
         return td
 
 # =============================================================================
-# Extract
+# Separating
+# =============================================================================
+def separate_fields(_td, _fields, **kwargs):
+    '''
+    This function combines the fields in one dictionary
+
+    Parameters
+    ----------
+    _td : dict / list of dict
+        Trial data.
+    _fields : list of str
+        Two fields to combine.
+    new_names : list of str
+        Method for combining the arrays. The default is subtract.
+    inplace : bool, optional
+        Perform operation on the input data dict. The default is False.
+
+    Returns
+    -------
+    td : dict / list of dict
+        Trial data.
+
+    '''
+
+    new_names = None
+    inplace = True
+    save_to_params = False
+    
+    # Check input variables
+    for key,value in kwargs.items():
+        key = key.lower()
+        if key == 'new_names':
+            new_names = value
+        elif key == 'inplace':
+            inplace = value
+        elif key == 'save_to_params':
+            save_to_params = True
+            save_to_params_field = value
+
+    if inplace:
+        td = _td
+    else:
+        td = copy_dict(_td)
+
+    # check dict input variable
+    input_dict = False
+    if type(td) is dict:
+        input_dict = True
+        td = [td]
+        
+    if type(td) is not list:
+        raise Exception('ERROR: _td must be a list of dictionaries!')
+    
+    if not is_field(td,_fields):
+        raise Exception('ERROR: some _fileds are not in td!')
+    
+    # check _fields input variable    
+    if type(_fields) is str:
+        _fields = [_fields]
+    if type(_fields) is not list:
+        raise Exception('ERROR: _fields must be a list!')
+    
+    # Check new names
+    if new_names == None:
+        new_names = []
+        for td_tmp in td:
+            for field in _fields:
+                field_size = transpose(np.array(td_tmp[field]),'column').shape[1]
+                new_names.append([field+'_'+str(iS) for iS in range(field_size)])
+    else:
+        if type(new_names) is not list:
+            raise Exception('ERROR: new_names must be a list!')
+        if type(new_names[0]) is str:
+            new_names = [new_names]
+        
+        for td_tmp in td:
+            for iN, (names, field) in enumerate(zip(new_names,_fields)):
+                field_size = transpose(np.array(td_tmp[field]),'column').shape[1]
+                if len(names) != field_size:
+                    raise Exception('ERROR: new_names[{}] has different length compared to the dimension of field "{}"!'.format(iN, field))
+    
+    if save_to_params:
+        subfield = td_subfield(td[0],save_to_params_field)
+        if 'signals' not in set(subfield.keys()):
+            raise Exception('ERROR: field "signals" does not exist in "{}"'.format(save_to_params_field))
+    
+    for td_tmp in td:
+        for names, field in zip(new_names, _fields):
+            for iN, name in enumerate(names):
+                td_tmp[name] = transpose(np.array(td_tmp[field]),'column')[:,iN]
+            
+        if save_to_params:
+            subfield = td_subfield(td_tmp,save_to_params_field)
+            for field in _fields:
+                subfield['signals'].remove(field)
+            subfield['signals'].extend(flatten_list(new_names))
+    
+    remove_fields(td,flatten_list(_fields), exact_field = True, inplace = inplace)
+    
+    if input_dict:
+        td = td[0]
+    
+    if not inplace:
+        return td
+  
+
+
+# =============================================================================
+# Extracting
 # =============================================================================
 def get_field(_td, _signals, save_signals_name = False):
     '''
@@ -658,7 +782,7 @@ def get_field(_td, _signals, save_signals_name = False):
         New dict containing the selected fields.
 
     '''
-    td = _td.copy()
+    td = copy_dict(_td)
     td_out = []
     
     input_dict = False
