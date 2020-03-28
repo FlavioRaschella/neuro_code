@@ -8,8 +8,11 @@ Created on Thu Jan  9 16:32:54 2020
 
 # Import data structures
 import numpy as np
-# import pandas as pd
+
+# Import file reading libs
 import h5py
+import csv
+from itertools import islice
 
 # Import path library
 import os, glob
@@ -29,6 +32,7 @@ class folmat_type(Enum):
     ns3 = '.ns3'
     ns6 = '.ns6'
     mat = '.mat'
+    csv = '.csv'
 
 def load_data_from_folder(folders, **kwargs):
     '''
@@ -39,9 +43,11 @@ def load_data_from_folder(folders, **kwargs):
     folders : str / list of str
         Path(s) where to find the data.
     files_number : list of int / list of list of int
-        Number(s) of the dataset to load.
+        Number(s) of the files to load.
+    files_name : list of str
+        Names of the files to load.
     files_format : str
-        Format of the data to collect.
+        Format of the files to collect.
     pre_ext : str, optional
         Name that distinguish the file (between file_num and files_format)
     verbose : bool, optional
@@ -68,6 +74,10 @@ def load_data_from_folder(folders, **kwargs):
     verbose = False
     reduce_lists = True
     
+    # Input for csv
+    start_line = 0
+    fields = None
+    
     # Function variables
     folders_list = []
     files_list = []
@@ -85,6 +95,10 @@ def load_data_from_folder(folders, **kwargs):
             pre_ext = value
         elif key == 'reduce_lists':
             reduce_lists = value
+        elif key == 'start_line':
+            start_line = value
+        elif key == 'fields':
+            fields = value
         elif key == 'verbose':
             verbose = value
 
@@ -174,8 +188,19 @@ def load_data_from_folder(folders, **kwargs):
     
     # Extract data from file
     for folder, file in zip(folders_list, files_list):
-        # break
-        td_dict_tmp = load_data_from_file(folder,file,files_format)
+        
+        if (files_format == folmat_type.ns3.value or files_format == folmat_type.ns6.value):
+            raise Exception('Implemented but never tested... To debug...')
+            
+        elif files_format == folmat_type.nev.value:
+            raise Exception('Implemented but never tested... To debug...')
+            
+        elif files_format == folmat_type.mat.value:
+            td_dict_tmp = load_data_from_file(folder,file,files_format)
+            
+        elif files_format == folmat_type.csv.value:
+            td_dict_tmp = load_data_from_file(folder,file,files_format, start_line = start_line, fields = fields)
+            
         td_dict_tmp = insert(td_dict_tmp,{'Folder':folder ,'File':file},0)
         if reduce_lists:
             td_dict_tmp = reduce_one_element_list(td_dict_tmp)
@@ -188,7 +213,7 @@ def load_data_from_folder(folders, **kwargs):
 """
 This function loads a file based on its format
 """ 
-def load_data_from_file(folder,file,file_format):
+def load_data_from_file(folder,file,file_format, **kwargs):
     '''
     This function loads the data from a file.
 
@@ -207,6 +232,18 @@ def load_data_from_file(folder,file,file_format):
         Dictionary of the data contained in the file.
 
     '''
+    
+    start_line = 0
+    fields = None
+    
+    # Check input variables
+    for key,value in kwargs.items():
+        key = key.lower()
+        if key == 'start_line':
+            start_line = value
+        elif key == 'fields':
+            fields = value
+    
     print('Opening file {}...'.format(os.path.join(folder,file)))
     if (file_format == folmat_type.ns3.value or file_format == folmat_type.ns6.value):
         # Open file
@@ -249,8 +286,39 @@ def load_data_from_file(folder,file,file_format):
         else:
             raise Exception('ERROR: {} MAT file is not saved as a dict!'.format(os.path.join(folder,file)))
         
+    elif file_format == folmat_type.csv.value:
+        # Try loading csv files        
+        data = load_csv_file(os.path.join(folder,file), start_line, fields)
+        
     return data
     # End of load_data_from_file
+
+
+def load_csv_file(filename, start_line = 0, fields = None):
+    
+    table = []
+    with open(filename, 'r') as f:
+        reader = csv.reader( [line.replace('\0','') for line in f] )
+        try:
+            for row in islice(reader, start_line, None):
+               table.append(row)
+        except csv.Error as e:
+            raise Exception('ERROR: file {}, line {}: {}'.format(filename, reader.line_num, e))
+    
+    if fields != None:
+        output = dict()
+        for field in fields:
+            output[field] = []
+        table_n = len(table)
+        for iR, row in enumerate(table):
+            if iR%10000 == 0: print('Creating dict. Row: {}/{}'.format(iR+1,table_n))
+            if len(row) == len(fields):
+                for row_el, field in zip(row,fields):
+                    output[field].append(row_el)
+    else: 
+        output = {'data': table}
+        
+    return output
 
 def load_mat_file(_file):
     for fun in h5py.File, scipy.io.loadmat:
