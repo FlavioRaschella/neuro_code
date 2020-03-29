@@ -11,7 +11,7 @@ from scipy.signal.windows import dpss
 import math
 import numpy as np
 from utils import transpose
-
+import matplotlib.pyplot as plt
 
 # Extract signal power from Hilber transformation
 def hilbert_transform(data):
@@ -128,7 +128,7 @@ def pmtm(data, NW = 4, Fs = None, NFFT = None):
         # Compute the whole power spectrum [Power]
         Sk[:,channel] = np.mean(abs(Sk_complex)**2, axis = 0)
 
-    return Sk_complex, Sk, w
+    return Sk_complex, Sk, w, NFFT
 
 
 def compute_psd(Sk, w, NFFT, Fs = None, unit = None):
@@ -197,6 +197,9 @@ def moving_pmtm(data, win_size, win_step, freq_range, NW = 4, Fs = None, NFFT=No
     # For Short-time fourier transform NW = 1
     # In fact NW = (tapers_n + 1)/2
     
+    if unit not in ['power','db']:
+        raise Exception('ERROR: wrong unit assigned!')
+    
     if type(data) is list:
         data = np.array(data)
     
@@ -221,7 +224,7 @@ def moving_pmtm(data, win_size, win_step, freq_range, NW = 4, Fs = None, NFFT=No
     mt_spectrogram = np.zeros((len(win_start),len(freq_idx),channels))
     
     for iWin, win_idx in enumerate(win_start):
-        _, Sk, w = pmtm(data[win_idx:win_idx+win_size,:], NW, Fs)
+        _, Sk, w, NFFT = pmtm(data[win_idx:win_idx+win_size,:], NW, Fs)
         psd, w, _ = compute_psd(Sk, w, NFFT, Fs, unit = unit)
         # Save values
         mt_spectrogram[iWin,:,:] = psd[freq_idx]
@@ -234,6 +237,34 @@ def moving_pmtm(data, win_size, win_step, freq_range, NW = 4, Fs = None, NFFT=No
         mt_spectrogram = np.squeeze(mt_spectrogram)
     
     return mt_spectrogram, sfreqs, stimes
+
+def get_informative_bands(mt_spectrogram, sfreqs = [], plot = None):
+    '''
+    This function computes the most informative bands.
+
+    Parameters
+    ----------
+    mt_spectrogram : np.ndarray [time x freq]
+        Spectogram if the signal.
+    sfreqs : np.ndarray, optional
+        Frequency band over which the mt_spectrogram was computed.
+        
+    Returns
+    -------
+    spect_band_info : np.ndarray
+        Show the bands which contains the most information
+    '''
+
+    spect_mean = np.mean(mt_spectrogram, axis = 0)
+    spect_std = np.std(mt_spectrogram, axis = 0)
+    spect_info_band = spect_std/spect_mean
+    
+    if plot and sfreqs == []:
+        plt.plot(spect_info_band)
+    else:
+        plt.plot(sfreqs, spect_info_band)
+        
+    return spect_info_band
 
 # EOF
     
