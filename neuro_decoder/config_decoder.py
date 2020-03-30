@@ -60,6 +60,10 @@ FEATURES_OPT = {'event_instant': {'fields': fields, 'event_fields': event_fields
 
 td_features = features_pipeline(td_out,**FEATURES_OPT)
 
+#%%
+X = td_features[0]['features']
+y = td_features[0]['labels']
+
 #%% DECODER
 CLASSIFIER =    {'selected': 'RF', \
                 'GB': dict(trees=1000, learning_rate=0.01, depth=3, seed=333), \

@@ -261,7 +261,7 @@ def get_informative_bands(mt_spectrogram, sfreqs = [], plot = None):
     
     if plot and sfreqs == []:
         plt.plot(spect_info_band)
-    else:
+    elif plot:
         plt.plot(sfreqs, spect_info_band)
         
     return spect_info_band
