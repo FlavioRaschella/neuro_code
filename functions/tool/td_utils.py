@@ -45,6 +45,7 @@ There are several method categories:
 import numpy as np
 # Plot lib
 import matplotlib.pyplot as plt
+from matplotlib import cm
 # Enumerator library
 from enum import Enum
 # Import utilities
@@ -909,23 +910,32 @@ def td_plot(td, y, **kwargs):
     ----------
     td : dict
         Trial data.
+        
     y : str/list of str
         Signals to plot.
-    x : str/list of str
+        
+    x : str/list of str, optional
         Signal to use for x axis.
-    subplot : tuple
+        
+    subplot : tuple, optional
         Structure of the suvplots in the figure.
-    events : str/list of str
-        Gait events to plot.
-    title : str
+        
+    title : str, optional
         Title of the plot.
-    xlim : tuple
+        
+    xlim : tuple, optional
         x min and max.
-    ylim : tuple
+        
+    ylim : tuple, optional
         y min and max.
-    kind: str
-        Set kind of input signal: '1d','2d'. The default value is '1d'.
-    save : bool
+        
+    sharex : bool, optional
+        Share the x axis among the plotted signals.
+        
+    sharey : bool, optional
+        Share the y axis among the plotted signals.
+        
+    save : bool, optional
         Flag for saving the figure.
 
     Example:
@@ -934,21 +944,31 @@ def td_plot(td, y, **kwargs):
     '''
     
     # Input variables
-    subplot = ()
-    events = None
-    title = None
     x = None
+    subplot = ()
+    title = None
+    
+    axs_external = []
+    
+    grid_plot = False
+    maximise = False
+    
     ylim = None
     xlim = None
     ylabel = None
     xlabel = None
+    sharex = False
+    sharey = False
+    
+    x_ticks = 'on'
+    
+    style = '-'
     colours = None
-    grid_plot = True
-    kind = '1d'
-    axs_external = []
-    maximise = False
+    
     save_figure = False
     save_format = 'pdf'
+    
+    events = None
     
     # Check input variables
     for key,value in kwargs.items():
@@ -973,10 +993,16 @@ def td_plot(td, y, **kwargs):
             ylim = value
         elif key == 'xlim':
             xlim = value
-        elif key == 'kind':
-            kind = value.lower()
+        elif key == 'sharex':
+            sharex = value
+        elif key == 'sharey':
+            sharey = value
         elif key == 'colours':
             colours = value
+        elif key == 'style':
+            style = value
+        elif key == 'x_ticks':
+            x_ticks = value
         elif key == 'maximise':
             maximise = value
         elif key == 'save':
@@ -1003,35 +1029,41 @@ def td_plot(td, y, **kwargs):
         if not(is_field(td, events)):
             raise Exception('ERROR: {} must be in _td!'.format(events))
     
-    # Get min signal number in a plot
-    min_signal_n = 1
-    for signal in y:
-        if type(signal) == list and len(signal) > min_signal_n:
-            min_signal_n = len(signal)
-    
+    # Saving paramters
     if type(save_format) is str:
         save_format = [save_format]
-        
     if type(save_format) is not list:
         raise Exception('ERROR: type(save_format) is not a list!')
         
-    # Figure
+    if x_ticks not in ['on','off']:
+        raise Exception('ERROR: x_ticks can be either "on" or "off"!')
+        
+    ##########################################################################    
+    # Create figure
     if len(axs_external) == 0:
         # Check subplot dimension
         if not(subplot):
             subplot = (len(y),1)
-            fig, axs = plt.subplots(nrows = subplot[0], ncols = subplot[1], sharex=True)
+        fig, axs = plt.subplots(nrows = subplot[0], ncols = subplot[1], sharex=sharex, sharey=sharey)
+        # Convert to flatten list
+        axs = flatten_list(axs.tolist())
     else:
         axs = axs_external
         if axs.ndim == 1:
             subplot = (axs.shape[0],1)
         else:
             subplot = axs.shape
+        # Convert to flatten list
+        axs = flatten_list(axs.tolist())
+    
+    # Find bottom plots
+    axes_pos = np.array([ax._position.bounds[1] for ax in axs])
+    bottom_idx = np.where( (axes_pos - min(axes_pos)<0.01 ))[0]
     
     if subplot[0]*subplot[1] != len(y):
         raise Exception('ERROR: axs and y have different length: axs: {} != y: {}'.format(len(axs),len(y)))
     
-    # Create figure
+    # Add title to figure
     if title != None:
         plt.suptitle(title)
     
@@ -1039,10 +1071,16 @@ def td_plot(td, y, **kwargs):
         mng = plt.get_current_fig_manager()
         mng.window.showMaximized()
     
-    if type(axs).__module__ != np.__name__:
-        axs  = [axs]
+    # if type(axs).__module__ != np.__name__:
+    #     axs  = [axs]
     
     # Prepare plotting variables
+    # Get max number of signals in a plot
+    max_signal_n = 1
+    for signal in y:
+        if type(signal) == list and len(signal) > max_signal_n:
+            max_signal_n = len(signal)
+        
     # Check x axis
     if x == None:
         x_list = [None] * len(y)
@@ -1055,45 +1093,108 @@ def td_plot(td, y, **kwargs):
             raise Exception('ERROR: x list have different length from y list!')
     else:
         raise Exception('ERROR: x must be None, str ot list of str!')
-    
-    # Check colours axis
+        
+    # Check x label
+    if xlabel == None:
+        xlab_list = [None] * len(y)
+    elif xlabel != None and type(xlabel) == str:
+        xlab_list = [xlabel] * len(y)
+    elif xlabel != None and type(xlabel) == list:
+        if len(xlabel) == len(y):
+            xlab_list = xlabel
+        else:
+            raise Exception('ERROR: xlabel list have different length from y list!')
+    else:
+        raise Exception('ERROR: xlabel must be None, str ot list of str!')
+        
+    # Check y label
+    if ylabel == None:
+        ylab_list = [None] * len(y)
+    elif ylabel != None and type(ylabel) == str:
+        ylab_list = [ylabel] * len(y)
+    elif ylabel != None and type(ylabel) == list:
+        if len(ylabel) == len(y):
+            ylab_list = ylabel
+        else:
+            raise Exception('ERROR: ylabel list have different length from y list!')
+    else:
+        raise Exception('ERROR: ylabel must be None, str ot list of str!')
+        
+    # Check axis colours
     if colours == None:
-        c_list = [[None] * min_signal_n] * len(y)
-    elif colours != None and type(colours) == list and type(colours[0]) != list:
-        c_list = [colours] * len(y)
-    elif colours != None and type(colours) == list and type(colours[0]) == list:
-        c_list = colours
+        col_list = [[None] * max_signal_n] * len(y)
+    elif type(colours) == str or type(colours) == cm.colors.ListedColormap:
+        col_list = [[colours] * max_signal_n] * len(y)
+    elif type(colours) == list and type(colours[0]) != list:
+        col_list = [colours] * len(y)
+    elif type(colours) == list and type(colours[0]) == list:
+        col_list = colours 
+        
+    # Check axis style
+    if style == None:
+        style_list = [[None] * max_signal_n] * len(y)
+    elif type(style) == str:
+        style_list = [[style] * max_signal_n] * len(y)
+    elif type(style) == list and type(style[0]) != list:
+        style_list = [style] * len(y)
+    elif type(style) == list and type(style[0]) == list:
+        style_list = style
+        
+    # Check x lim
+    if type(xlim) == tuple or type(xlim) == np.ndarray:
+        xlim_list = [xlim] * len(y)
+    else:
+        xlim_list = [None] * len(y)
+        
+    # Check y lim
+    if type(ylim) == tuple or type(ylim) == np.ndarray:
+        ylim_list = [ylim] * len(y)
+    else:
+        ylim_list = [None] * len(y)
     
-    # print(x_list,'\n',y,'\n',axs,'\n',c_list)
-    for x_ax, signal, ax, col in zip(x_list, y, axs, c_list):
-        # print(x_ax,'\n',signal,'\n',ax,'\n',col)
+    # Check x ticks
+    if x_ticks == 'on':
+        x_ticks_list = ['on'] * len(y)
+    else:
+        x_ticks_list = ['off'] * len(y)
+    
+    # Plot
+    n_plots = len(y)
+    for iPlt, (x, signal, xlim, ylim, xlab, ylab, col, style, x_tick, ax) in \
+        enumerate(zip(x_list, y, xlim_list, ylim_list, xlab_list, ylab_list, col_list, style_list, x_ticks_list, axs)):
+        # break
         # Set plot title
         if type(signal) is list:
             signal_name = ' + '.join(signal)
         else:
             signal_name = signal
             signal = [signal]
-                
+        
+        # Set title
         ax.set_title(signal_name)
         
+        # Set plot grid
+        ax.grid(grid_plot)
+        
         # Set plot labels
-        if xlabel != '':
-            ax.set_xlabel('')
-        if ylabel != '':
-            ax.set_ylabel('')
+        if xlabel != None:
+            ax.set_xlabel(xlabel)
+        if ylabel != None:
+            ax.set_ylabel(ylabel)
                 
+        # Get dimension of the singal in input
         signal_dim = td[signal[0]].ndim
             
         # Set axes limits
-        if ylim != None:
-            ax.set_ylim(ylim)
-        else:
-            if kind == '1d':
-                if ax.get_ylim() == (0,1):
-                    ylim_tmp = [+np.inf, -np.inf]
+        if signal_dim == 1:
+            if type(ylim) == tuple:
+                ax.set_ylim(ylim)
+            else:
+                if ax.get_ylim() == (0,1): # It is a new figure
+                    ylim_tmp = [+np.inf, -np.inf] # Start to set up the yaxis
                 else:
-                    ylim_tmp = list(ax.get_ylim())
-                    
+                    ylim_tmp = list(ax.get_ylim()) # Use the existing yaxis
+                # Extract ylim from the signals
                 for sig in signal:
                     sig_tmp = transpose(td[sig],'column')
                     if np.min(sig_tmp) < ylim_tmp[0]:
@@ -1101,45 +1202,67 @@ def td_plot(td, y, **kwargs):
                     if np.max(sig_tmp) > ylim_tmp[1]:
                         ylim_tmp[1] = np.max(td[sig])
                 ax.set_ylim(ylim_tmp)
-            elif kind == '2d':
-                print('WARNINIG: management of y axis for the 2d plot still not implemented! Sorry...')
-        if xlim != None:
-            ax.set_xlim(xlim)
-        
-        # Set plot grid
-        ax.grid(grid_plot)
+            if type(xlim) == tuple:
+                ax.set_xlim(xlim)
+        elif signal_dim == 2:
+            if type(xlim) == np.ndarray and type(ylim) == np.ndarray:
+                X, Y = np.meshgrid(xlim, ylim)
+            else:
+                X, Y = np.meshgrid(np.arange(td[signal[0]].shape[0]), np.arange(td[signal[0]].shape[1]))
+        else:
+            raise Exception('ERROR: td_plot implemented only for signals up to 2d. You gave a {}d signal...'.format(signal_dim))
         
         # Plot signal
-        # if type(signal) is list:
-        for sig, c in zip(signal, col):
-            if x_ax == None:
-                if c == None:
-                    if kind == '1d':
-                        ax.plot(td[sig])
+        for sig, c, s in zip(signal, col, style):
+            # break
+            # Get dimension of the singal
+            signal_dim = td[sig].ndim
+            if signal_dim == 1:
+                if x == None:
+                    if c == None:
+                        if s == None:
+                            ax.plot(td[sig])
+                        else:
+                            ax.plot(td[sig], linestyle = s)
                     else:
-                        ax.imshow(td[sig], extent=[0, 1, 0, 1])
+                        if s == None:
+                            ax.plot(td[sig], color = c)
+                        else:
+                            ax.plot(td[sig], color = c, linestyle = s)
                 else:
-                    ax.plot(td[sig],color = c)
-            else:
-                if c == None:
-                    if kind == '1d':
-                        ax.plot(td[x_ax],td[sig])
+                    if c == None:
+                        if s == None:
+                            ax.plot(td[x], td[sig])
+                        else:
+                            ax.plot(td[x], td[sig], linestyle = s)
                     else:
-                        ax.imshow(td[sig], extent=[0, 1, 0, 1])
+                        if s == None:
+                            ax.plot(td[x], td[sig], color = c)
+                        else:
+                            ax.plot(td[x], td[sig], color = c, linestyle = s)
+                            
+            elif signal_dim == 2:
+                if c == None:
+                    try:
+                        cs = ax.contourf(X, Y, td[sig])
+                    except:
+                        cs = ax.contourf(X, Y, td[sig].T)
                 else:
-                    ax.plot(td[x_ax],td[sig],color = c)
-        # else:
-        #     if x_ax == None:
-        #         if col[0] == None:
-        #             ax.plot(td[signal])
-        #         else:
-        #             ax.plot(td[signal],color = col)
-        #     else:
-        #         if col[0] == None:
-        #             ax.plot(td[x_ax],td[signal])
-        #         else:
-        #             ax.plot(td[x_ax],td[signal],color = col)
-        
+                    try:
+                        cs = ax.contourf(X, Y, td[sig], cmap=c)
+                    except:
+                        cs = ax.contourf(X, Y, td[sig].T, cmap=c)
+                fig.colorbar(cs, ax = ax)
+                
+        # Manage ticks
+        if x_tick == 'off' and iPlt not in bottom_idx:
+            ax.tick_params(
+                axis='x',          # changes apply to the x-axis
+                which='both',      # both major and minor ticks are affected
+                bottom=False,      # ticks along the bottom edge are off
+                top=False,         # ticks along the top edge are off
+                labelbottom=False) # labels along the bottom edge are off
+                
         # Plot gait events
         if events != None:
             for event in events:
@@ -1158,6 +1281,25 @@ def td_plot(td, y, **kwargs):
     
     # Set tight plot
     plt.tight_layout()
+        
+    if subplot[1] == 1:
+        hspace=0.7
+        if x_ticks == 'off' or sharex == True:
+            hspace-=0.3
+    else:
+        hspace=0.3
+        if x_ticks == 'off' or sharex == True:
+            hspace-=0.1
+        
+    plt.subplots_adjust(left=0.1, right=0.9, bottom=0.1, top=0.9, wspace=0.2, hspace=hspace)
+    # left: the left side of the subplots of the figure
+    # right: the right side of the subplots of the figure
+    # bottom: the bottom of the subplots of the figure
+    # top: the top of the subplots of the figure
+    # wspace: the amount of width reserved for space between subplots,
+    #         expressed as a fraction of the average axis width
+    # hspace: the amount of height reserved for space between subplots,
+    #         expressed as a fraction of the average axis height
     
     if save_figure:
         for form in save_format:
@@ -1171,8 +1313,7 @@ def td_plot(td, y, **kwargs):
             else:
                 raise Exception('ERROR: wrong save format assignaed!')
     
-    if len(axs_external) == 0:
-        return fig, axs
+    return fig, axs
 
 
 if __name__ == '__main__':

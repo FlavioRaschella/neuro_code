@@ -275,8 +275,7 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, inplace 
     if input_dict:
         td = td[0]
     
-    if not inplace:
-        return td
+    return td
     
 
 # =============================================================================
@@ -453,6 +452,7 @@ def compute_multitaper(_td, **kwargs):
     freq_min = 10
     freq_max = 100
     NW = 4
+    unity = 'db'
     inplace = True
     verbose = False
     adjust_target = False
@@ -468,6 +468,8 @@ def compute_multitaper(_td, **kwargs):
             freq_min = value
         elif key == 'freq_stop':
             freq_max = value
+        elif key == 'unity':
+            unity = value
         elif key == 'nw':
             NW = value
         elif key == 'fs':
@@ -476,6 +478,8 @@ def compute_multitaper(_td, **kwargs):
             fields = value
         elif key == 'inplace':
             inplace = value
+        elif key == 'verbose':
+            verbose = value
         elif key == 'adjust_target':
             adjust_target = True
             adjust_target_field = value
@@ -538,16 +542,16 @@ def compute_multitaper(_td, **kwargs):
     # Get frequency range
     freq_range = [freq_min , freq_max]
     
-    for td_tmp in td:
+    for iTd, td_tmp in enumerate(td):
         # Get window's info in samples
         window_size_smp = round(window_size_sec * fs)
         window_step_smp = round(window_step_sec * fs)
         
         for iFld, field in enumerate(fields):
             if verbose:
-                print('Processing signal {}/{}'.format(iFld+1, len(fields)))
-            td_tmp[field], sfreqs, stimes = moving_pmtm(td_tmp[field], fs, window_size_smp, window_step_smp, freq_range, NW=NW, NFFT=None, verbose=verbose)
-        
+                print('\nProcessing signal {}/{} in td {}/{}'.format(iFld+1, len(fields), iTd+1, len(td)))
+            td_tmp[field], sfreqs, stimes = moving_pmtm(td_tmp[field], window_size_smp, window_step_smp, freq_range, NW = NW, Fs = fs, unit = unity, verbose=verbose)
+                                            
         # Update frequency info
         if fs_string == '': # Not using params
             td_tmp['freq'] = sfreqs
@@ -956,9 +960,8 @@ def load_pipeline(**kwargs):
         combine_dicts(td, td_target, inplace = True)
     
     if convert_fields_to_numeric_array_dict != None:
-        convert_fields_to_numeric_array(td, _fields = convert_fields_to_numeric_array_dict['fields'], 
-                                        _vector_target_field = convert_fields_to_numeric_array_dict['target_vector'],
-                                        inplace = True)    
+        td = convert_fields_to_numeric_array(td, _fields = convert_fields_to_numeric_array_dict['fields'], 
+                                        _vector_target_field = convert_fields_to_numeric_array_dict['target_vector'])    
     
     if params != None:
         add_params(td, params)

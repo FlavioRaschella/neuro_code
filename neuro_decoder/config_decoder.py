@@ -35,12 +35,18 @@ CLEANING_OPT = {'combine_fields': {'fields': CHANNELS, 'method': 'subtract', 're
 td = cleaning_pipeline(td,**CLEANING_OPT)
 
 #%% PREPROCESS DATA
+# PREPROCESS_OPT = {'downsample': {'fields': 'params/data/data', 'fs': 'params/data/data', 
+#                                  'field_time': 'params/data/data', 'fs_down': 2000, 'adjust_target': 'params/event',
+#                                  'inplace': False, 'verbose': True}}
 # PREPROCESS_OPT = {'multitaper': {'fields': 'params/data/data', 'fs': 'params/data/data', 'wind_size': 0.25,'wind_step': 0.01, 'freq_start': 10, 'freq_stop': 100, 'NW': 4, 'adjust_target': 'params/event', 'inplace': False}}
 # PREPROCESS_OPT = {'filter': {'kind': 'bandpass', 'fields': 'params/data/data', 'fs': 'params/data/data', 'f_min' : 50, 'f_max': 100, 'order':3}}
 # PREPROCESS_OPT = {'filter': {'kind': 'sgolay', 'fields': 'params/data/data', 'fs': 'params/data/data', 'win_len': '3fs'}}
 
 PREPROCESS_OPT = {'downsample': {'fields': 'params/data/data', 'fs': 'params/data/data', 
                                  'field_time': 'params/data/data', 'fs_down': 2000, 'adjust_target': 'params/event',
+                                 'inplace': False, 'verbose': True},
+                  'multitaper': {'fields': 'params/data/data', 'fs': 'params/data/data', 'wind_size': 0.25,'wind_step': 0.01,
+                                 'freq_start': 10, 'freq_stop': 100, 'NW': 4,'adjust_target': 'params/event',
                                  'inplace': False, 'verbose': True}}
 
 td_out = preprocess_pipeline(td,**PREPROCESS_OPT)
@@ -65,18 +71,10 @@ X = td_features[0]['features']
 y = td_features[0]['labels']
 
 #%% DECODER
-CLASSIFIER =    {'selected': 'RF', \
-                'GB': dict(trees=1000, learning_rate=0.01, depth=3, seed=333), \
-                'RF': dict(trees=1000, depth=5, seed=333), \
-                'rLDA': dict(r_coeff=0.3), \
-                'LDA': dict()}
-EXPORT_CLS = True
+CLASSIFIER =    {}
 
 #%% Cross Validation
-CV_PERFORM =   {'selected':'StratifiedShuffleSplit', \
-                'False':None, \
-                'StratifiedShuffleSplit': dict(test_ratio=0.2, folds=8, seed=0, export_result=True), \
-                'LeaveOneOut': dict(export_result=False)}
+CV_PERFORM =   {}
 
 #%% Test decoder
 
