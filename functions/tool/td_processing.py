@@ -23,7 +23,7 @@ from processing import artefacts_removal, convert_points_to_target_vector, get_e
 
 from power_estimation import moving_pmtm
 
-from filters import sgolay_filter, downsample_signal
+from filters import sgolay_filter, downsample_signal, moving_average
 from filters import butter_bandpass_filtfilt as bpff
 from filters import butter_lowpass_filtfilt as lpff
 from filters import butter_highpass_filtfilt as hpff
@@ -42,14 +42,15 @@ def combine_epochs(td_1, td_2):
 
     Parameters
     ----------
-    td_1 : dict / list of dict
-        trial data with epoch field.
-    td_2 : dict / list of dict
-        trial data with epoch field.
+    td_1 : dict / list of dict, len (n_td)
+        Trial data with epoch field.
+        
+    td_2 : dict / list of dict, len (n_td)
+        Trial data with epoch field.
 
     Returns
     -------
-    td_epoch : dict / list of dict
+    td_epoch : dict / list of dict, len (n_td)
         Dict aving as only field 'epochs', a binary array.
 
     '''
@@ -65,26 +66,29 @@ def combine_epochs(td_1, td_2):
 
 def segment_data(_td, td_epoch, fs, **kwargs):
     '''
-    This function segments the trial data in several blocks
+    This function segments the trial data in several blocks.
 
     Parameters
     ----------
-    _td : dict / list of dict
+    _td : dict / list of dict, len (n_td)
         Trial data.
-    td_epoch : dict / list of dict
-        Array of good epochs
+        
+    td_epoch : dict / list of dict, len (n_td)
+        Array of epochs to keep.
+        
     fs : int / float
-        Frequency of the signal
+        Sampling frequency.
+        
     invert_epoch: str, optional
-        set whether invert the epoch values or not. The default value is False. 
+        Set whether invert the epoch values or not. The default value is False. 
 
     Returns
     -------
-    td_out : dict / list of dict
+    td_out : dict / list of dict, len (n_td)
         Trial data.
 
     '''
-    
+    # Input data
     invert_epoch = False
     
     # Check input variables
@@ -127,20 +131,24 @@ def segment_data(_td, td_epoch, fs, **kwargs):
 
 def identify_artefacts(_td, **kwargs):
     '''
-    This function identifies the artefacts in the trial data dict(s)
+    This function identifies the artefacts for the signals in td.
 
     Parameters
     ----------
-    _td : dict / list of dict
+    _td : dict / list of dict, len (n_td)
         Trial data.
+        
     fields : list of str
-        Fields over which finding the artefacts
+        Fields over which finding the artefacts.
+        
     fs : int
-        Sample frequency of the signals
+        Sampling frequency of the signals in fields.
+        
     method : str, optional
         Method for removing the artefacts. The default is amplitude.
-    signal_n : int
-        Number of signal on which to look for artefacts
+        
+    signal_n : int, optional
+        Number of signal on which to look for artefacts. The default is len(fields)-1.
     
     Returns
     -------
@@ -216,20 +224,24 @@ def identify_artefacts(_td, **kwargs):
     
     return td_artefacts
 
-def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, inplace = True):
+def convert_fields_to_numeric_array(_td, fields, vector_target_field, inplace = True):
     '''
-    This function converts the content of fields in a vector
+    This function converts the points in a vector to a target vector.
+    [1,4,6] --> [0 1 0 0 1 0 1]
 
     Parameters
     ----------
-    _td : dict / list of dict
+    _td : dict / list of dict, len (n_td)
         Trial data.
-    _fields : str / list of str
-        Fields from which collect the data to convert.
-    _vector_target_field : str
-        Field with the name of the array in td to compare to _fields vectors
+        
+    fields : str / list of str, , len (n_fields)
+        Fields in td from which collect the data to convert.
+        
+    vector_target_field : str
+        Field with the name of the array in td to compare to fields vectors
+        
     inplace : bool, optional
-        Perform operation on the input data dict. The default is False.
+        Perform operation on the input data dict. The default is True.
 
     Returns
     -------
@@ -253,22 +265,22 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, inplace 
         raise Exception('ERROR: _td must be a list of dictionaries!')
         
     # check string input variable
-    if type(_fields) is str:
-        _fields = [_fields]
+    if type(fields) is str:
+        fields = [fields]
         
-    if type(_fields) is not list:
+    if type(fields) is not list:
         raise Exception('ERROR: _str must be a list of strings!')
     
-    if type(_vector_target_field) is not str:
-        raise Exception('ERROR: _vector_target_field must be a string!')
+    if type(vector_target_field) is not str:
+        raise Exception('ERROR: vector_target_field must be a string!')
     
     # Check that _signals are in the dictionary
-    if not is_field(td,_fields):
+    if not is_field(td,fields):
         raise Exception('ERROR: Selected fields are not in the dict')
     
     for td_tmp in td:
-        vector_compare = np.array(td_tmp[_vector_target_field])
-        for field in _fields:
+        vector_compare = np.array(td_tmp[vector_target_field])
+        for field in fields:
             points = np.array(td_tmp[field])
             td_tmp[field] = convert_points_to_target_vector(points, vector_compare)
         
@@ -283,12 +295,54 @@ def convert_fields_to_numeric_array(_td, _fields, _vector_target_field, inplace 
 # =============================================================================
 
 def downsample(_td, **kwargs):
-    
+    '''
+    This function downsamples signals in td (e.g. td[fields]).
+
+    Parameters
+    ----------
+    _td : dict / list of dict, len (n_td)
+        Trial data.
+        
+    fields : str / list of str, len (n_fields)
+        Fields in td from which collect the data to convert.
+        If str, it can either be the key in td or the path in td where to find 
+        the name of the signals to use in td (e.g. params/data/data).
+        
+    fs : str / int
+        Sampling frequency.
+        If str, it can either be one key in td or the path in td where to find 
+        the fs in td (e.g. params/data/data).
+        
+    fs_down : int / float
+        New sampling frequency used for downsampling.
+        
+    field_time : str, optional
+        Fields in td containing the time information of the signals.
+        It can either be one key in td or the path in td where to find the time 
+        signal in td (e.g. params/data/data).
+        
+    adjust_target : str, optional
+        Fields in td containing the target signals (binary signals).
+        It can either be one key in td or the path in td where to find the fs 
+        (e.g. params/data/data).
+        
+    inplace : bool, optional
+        Perform operation on the input data dict. The default is True.
+        
+    verbose : bool, optional
+        Narrate the several operations in this method. The default is False.
+
+    Returns
+    -------
+    td : dict / list of dict, len (n_td)
+        Trial data.
+
+    '''
     fields = None
     fields_string = ''
-    field_time = None
     fs = None
     fs_down = None
+    field_time = None
     inplace = True
     verbose = False
     adjust_target = False
@@ -355,12 +409,8 @@ def downsample(_td, **kwargs):
             fs = td[0][fs]
             
     # Check fs_down 
-    if type(fs_down) is str:
-        fs_down = td[0][fs_down]
-    elif type(fs_down) is int or type(fs_down) is int:
-        pass
-    else:
-        raise Exception('ERROR: fs_down must be a int / float / str!')
+    if type(fs_down) is not int or type(fs_down) is not int:
+        raise Exception('ERROR: fs_down must be an int or a float!')
 
     # Check field_time 
     if field_time != None and type(field_time) is str:
@@ -428,18 +478,60 @@ def downsample(_td, **kwargs):
 
 def compute_multitaper(_td, **kwargs):
     '''
-    This function compute the multitapers spectal analysis for the td signals
+    This function computes the multitapers spectal analysis for the signals in td (e.g. td[fields]).
 
     Parameters
     ----------
-    _td : dict / list of dict
-        trial data with epoch field.
-    **kwargs : dict
-        Additional information for computing multitaper.
+    _td : dict / list of dict, len (n_td)
+        Trial data.
+        
+    fields : str / list of str, len (n_fields)
+        Fields in td from which collect the data to convert.
+        If str, it can either be the key in td or the path in td where to find 
+        the name of the signals to use in td (e.g. params/data/data).
+        
+    fs : str / int
+        Sampling frequency.
+        If str, it can either be one key in td or the path in td where to find 
+        the fs in td (e.g. params/data/data).
+        
+    window_size_sec : int / float, optional
+        Size of the sliding window for computing the pmtm. It is in seconds.
+        The default is 0.25 seconds.
+        
+    window_step_sec : int / float, optional
+        Step of the sliding window for computing the pmtm. It is in seconds.
+        The default is 0.01 seconds.
+        
+    NW : int, optional
+        Time Half-Bandwidth Product for computing the pmtm. The default is 4.
+        
+    freq_min : int / float, optional
+        Minimum frequency in the stored frequency band of the spectogram.
+        The default is 10.
+         
+    freq_max : int / float, optional
+        Maximum frequency in the stored frequency band of the spectogram.
+        The default is 100.
+        
+    unity : str, optional
+        Unity of the output computed power. It can be 'power' or 'db'. 
+        The default is 'db'.
+        
+    adjust_target : str, optional
+        Fields in td containing the target signals (binary signals).
+        It can either be one key in td or the path in td where to find the 
+        target signal (e.g. params/data/data).
+        
+    inplace : bool, optional
+        Perform operation on the input data dict. The default is True.
+        
+    verbose : bool, optional
+        Narrate the several operations in this method. The default is False.
 
     Returns
     -------
-    td : dict / list of dict
+    td : dict / list of dict, len (n_td)
         trial data with signals analysed based on the multitaper parameters.
 
     '''
@@ -449,13 +541,13 @@ def compute_multitaper(_td, **kwargs):
     fs_string = ''
     window_size_sec = 0.25 # in seconds
     window_step_sec = 0.01 # in seconds
+    NW = 4
     freq_min = 10
     freq_max = 100
-    NW = 4
     unity = 'db'
+    adjust_target = False
     inplace = True
     verbose = False
-    adjust_target = False
 
     # Check input variables
     for key,value in kwargs.items():
@@ -542,11 +634,13 @@ def compute_multitaper(_td, **kwargs):
     # Get frequency range
     freq_range = [freq_min , freq_max]
     
+    # Get window's info in samples
+    window_size_smp = round(window_size_sec * fs)
+    window_step_smp = round(window_step_sec * fs)
+    
+    # Loop over the data trials
     for iTd, td_tmp in enumerate(td):
-        # Get window's info in samples
-        window_size_smp = round(window_size_sec * fs)
-        window_step_smp = round(window_step_sec * fs)
-        
+        # Compute pmtm
         for iFld, field in enumerate(fields):
             if verbose:
                 print('\nProcessing signal {}/{} in td {}/{}'.format(iFld+1, len(fields), iTd+1, len(td)))
@@ -579,12 +673,71 @@ def compute_multitaper(_td, **kwargs):
     return td
 
 def compute_filter(_td, **kwargs):
+    '''
+    This function computes filters for the signals in td (e.g. td[fields]).
+
+    Parameters
+    ----------
+    _td : dict / list of dict, len (n_td)
+        Trial data.
+        
+    fields : str / list of str, len (n_fields)
+        Fields in td from which collect the data to convert.
+        If str, it can either be the key in td or the path in td where to find 
+        the name of the signals to use in td (e.g. params/data/data).
+        
+    fs : str / int
+        Sampling frequency.
+        If str, it can either be one key in td or the path in td where to find 
+        the fs in td (e.g. params/data/data).
+        
+    kind : str
+        Type of filter to apply to the data. Possible options are: 
+        'bandpass', 'lowpass', 'highpass', 'sgolay'.
+         
+    order : int , optional
+        Order of the filter. The default value is 5.
+        
+    f_low : int / float, optional
+        Frequency value for low pass filtering. It is used for 'bandpass',
+        'lowpass' and 'highpass'.
+         
+    f_high : int / float, optional
+        Frequency value for high pass filtering. It is used for 'bandpass',
+        'lowpass' and 'highpass'.
+        
+    win_len : int / str, optional
+        Length of the window used for the sgolay filter.
+        If str, it can describe a fs multiplication (e.g. '3fs'). In this case,
+        3 times the fs will be used.
+        
+    override_fields : str, optional
+        Decide wether override the existiong signals or build new ones.
+        The default value is True.
+        
+    save_to_params : str, optional
+        Save the name of the new filtered signals in the params structure in td.
+        The str in input must be the path to the saving location (e.g. params/data/data).
+        The default value is False.
+        
+    inplace : bool, optional
+        Perform operation on the input data dict. The default is True.
+        
+    verbose : bool, optional
+        Narrate the several operations in this method. The default is False.
+
+    Returns
+    -------
+    td : dict / list of dict, len (n_td)
+        trial data with filtered signals.
+
+    '''
     # Filtering information
     fields = None
     fs = None
     kind = None
-    f_min = None
-    f_max = None
+    f_low = None
+    f_high = None
     win_len = None
     order = 5
     override_fields = True
@@ -601,10 +754,10 @@ def compute_filter(_td, **kwargs):
             fields = value
         elif key == 'fs':
             fs = value
-        elif key == 'f_min':
-            f_min = value
-        elif key == 'f_max':
-            f_max = value
+        elif key == 'f_low':
+            f_low = value
+        elif key == 'f_high':
+            f_high = value
         elif key == 'win_len':
             win_len = value
         elif key == 'order':
@@ -671,26 +824,26 @@ def compute_filter(_td, **kwargs):
                 print('Filtering signal {}/{}'.format(iFld+1, len(fields)))
             if kind == 'bandpass':
                 if not override_fields:
-                    signal_name = field + '_bp_{}_{}'.format(f_min,f_max)
+                    signal_name = field + '_bp_{}_{}'.format(f_low,f_high)
                 else:
                     signal_name = field
-                td_tmp[signal_name] = bpff(data = td_tmp[field], lowcut = f_min, highcut = f_max, fs = fs, order=order)
+                td_tmp[signal_name] = bpff(data = td_tmp[field], lowcut = f_low, highcut = f_high, fs = fs, order=order)
             
             elif kind == 'lowpass':
                 if not override_fields:
-                    signal_name = field + '_lp_{}'.format(f_min)
+                    signal_name = field + '_lp_{}'.format(f_low)
                 else:
                     signal_name = field
                 
-                td_tmp[signal_name] = lpff(data = td_tmp[field], lowcut = f_min, fs = fs, order=order)
+                td_tmp[signal_name] = lpff(data = td_tmp[field], lowcut = f_low, fs = fs, order=order)
             
             elif kind == 'highpass':
                 if not override_fields:
-                    signal_name = field + '_hp_{}'.format(f_max)
+                    signal_name = field + '_hp_{}'.format(f_high)
                 else:
                     signal_name = field
                 
-                td_tmp[signal_name] = hpff(data = td_tmp[field], highcut = f_max, fs = fs, order=order)
+                td_tmp[signal_name] = hpff(data = td_tmp[field], highcut = f_high, fs = fs, order=order)
             
             elif kind == 'sgolay':
                 if not override_fields:
@@ -714,13 +867,198 @@ def compute_filter(_td, **kwargs):
     return td
         
 
+def compute_mav(_td, **kwargs):
+    '''
+    This function computes the mean average value (mav) for the signals in td 
+    (e.g. td[fields]).
+
+    Parameters
+    ----------
+    _td : dict / list of dict, len (n_td)
+        Trial data.
+        
+    fields : str / list of str, len (n_fields)
+        Fields in td from which collect the data to convert.
+        If str, it can either be the key in td or the path in td where to find 
+        the name of the signals to use in td (e.g. params/data/data).
+        
+    fs : str / int
+        Sampling frequency.
+        If str, it can either be one key in td or the path in td where to find 
+        the fs in td (e.g. params/data/data).
+        
+    window_size_sec : int / float, optional
+        Size of the sliding window for computing the mav. It is in seconds.
+        The default is 0.5 seconds.
+        
+    window_step_sec : int / float, optional
+        Step of the sliding window for computing the mav. It is in seconds.
+        The default is 0.25 seconds.
+        
+    adjust_target : str, optional
+        Fields in td containing the target signals (binary signals).
+        It can either be one key in td or the path in td where to find the  
+        target signal (e.g. params/data/data).
+        
+    inplace : bool, optional
+        Perform operation on the input data dict. The default is True.
+        
+    verbose : bool, optional
+        Narrate the several operations in this method. The default is False.
+
+    Returns
+    -------
+    td : dict / list of dict, len (n_td)
+        trial data with filtered signals.
+
+    '''
+    # Input info for computing mav
+    fields = None
+    fs = None
+    window_size_sec = 0.5 # in seconds
+    window_step_sec = 0.25 # in seconds
+    inplace = True
+    verbose = False
+    adjust_target = False
+
+    # Check input variables
+    for key,value in kwargs.items():
+        key = key.lower()
+        if key == 'fields':
+            fields = value
+        elif key == 'fs':
+            fs = value
+        elif key == 'wind_size':
+            window_size_sec = value
+        elif key == 'wind_step':
+            window_step_sec = value
+        elif key == 'inplace':
+            inplace = value
+        elif key == 'verbose':
+            verbose = value
+        elif key == 'adjust_target':
+            adjust_target = True
+            adjust_target_field = value
+        else:
+            print('WARNING: key "{}" not recognised by the compute_multitaper function...'.format(key))
+    
+    if inplace:
+        td = _td
+    else:
+        td = copy_dict(_td)
+    
+    # Check input values
+    input_dict = False
+    if type(td) is dict:
+        input_dict = True
+        td = [td]
+    if type(td) is not list:
+        raise Exception('ERROR: _td must be a list of dictionaries!')
+    if fields == None:
+        raise Exception('ERROR: fields must be assigned!')
+    if fs == None:
+        raise Exception('ERROR: fs must be assigned!')
+    
+    # Check fs 
+    if type(fs) is str:
+        if '/' in fs:
+            fs = td_subfield(td[0],fs)['fs']
+        else:
+            fs = td[0][fs]
+            
+    # Check fields        
+    if type(fields) is str and '/' in fields:
+        fields = td_subfield(td[0],fields)['signals']
+    if type(fields) is str:
+        fields = [fields]
+    if type(fields) is not list:
+        raise Exception('ERROR: fields must be a list of strings!')
+        
+    if adjust_target:
+        if type(adjust_target_field) is str:
+            if '/' in adjust_target_field:
+                target_fields = []
+                target_subfields = td_subfield(td[0],adjust_target_field)
+                for event, value in target_subfields.items():
+                    target_fields.append(value['signals'])
+            else:
+                target_fields = [adjust_target_field]
+            target_fields = flatten_list(target_fields)
+        if type(target_fields) is not list:
+            raise Exception('ERROR: fields must be a list of strings!')
+            
+        if not is_field(td,target_fields):
+            raise Exception('ERROR: target_fields is not in td!')
+        
+    # Get window's info in samples
+    window_size_smp = round(window_size_sec * fs)
+    window_step_smp = round(window_step_sec * fs)
+    
+    for iTd, td_tmp in enumerate(td):
+        for iFld, field in enumerate(fields):
+            if verbose: print('\MAV signal {}/{} in td {}/{}'.format(iFld+1, len(fields), iTd+1, len(td)))
+            td_tmp[field] = moving_average(td_tmp[field], window_step_smp, window_size_smp)
+        
+        # Re-map target dataset
+        if adjust_target:
+            for event in target_fields:
+                event_mav = moving_average(td_tmp[event], window_step_smp, window_size_smp)
+                td_tmp[event] = np.zeros(len(event_mav))
+                td_tmp[event][event_mav>1/window_size_smp] = 1
+    if input_dict:
+        td = td[0]
+    
+    return td
+
 
 # =============================================================================
 # Features
 # =============================================================================
         
 def extract_features_instant(td, **kwargs):
+    '''
+    This function extracts the features from the signals in td (e.g. td[fields]).
+
+    Parameters
+    ----------
+    td : dict / list of dict, len (n_td)
+        Trial data.
         
+    fields : str / list of str, len (n_fields)
+        Fields in td from which collect the data.
+        If str, it can either be the key in td or the path in td where to find 
+        the name of the signals to use in td (e.g. params/data/data).
+        
+    fs : str / int
+        Sampling frequency.
+        If str, it can either be one key in td or the path in td where to find 
+        the fs in td (e.g. params/data/data).
+        
+    time_n : int / list of int, len (n_times), optional
+        Number of additional time stamps to cellect before the event.
+        The default is 10.
+        
+    feature_win_sec : float / list of float, len (n_feature_win_sec), optional
+        Length of the window from which collect the time points. It is seconds.
+        The default is 0.5 seconds.
+        
+    dead_win_sec : float / list of float, len (n_dead_win_sec), optional
+        Length of the dead time around the event. It is in seconds.
+        The default is 0.02 seconds.
+        
+    no_event_sec : float / list of float, len (n_no_event_sec), optional
+        Amount of no events to collect for the no_event class. It is in seconds.
+        The default is 1 second.
+        
+    verbose : bool, optional
+        Narrate the several operations in this method. The default is False.
+
+    Returns
+    -------
+    td : dict / list of dict, len (n_td)
+        trial data with filtered signals.
+
+    '''
     fields = None
     event_fields = None
     fs = None
@@ -832,7 +1170,7 @@ def extract_features_instant(td, **kwargs):
         for feature_win in feature_win_smp:
             for dead_win in dead_win_smp:
                 for no_event in no_event_smp:
-                    print('Extract features loop {}/{}'.format(loop_count,loop_n))
+                    if verbose: print('Extract features loop {}/{}'.format(loop_count,loop_n))
                     # Collect signals for features in one 2darray
                     features = []
                     labels = []
@@ -1075,6 +1413,8 @@ def preprocess_pipeline(td, **kwargs):
             td = compute_multitaper(td, **operation[1])
         elif operation[0] == 'downsample':
             td = downsample(td, **operation[1])
+        elif operation[0] == 'mav':
+            td = compute_mav(td, **operation[1])
     
     return td
 

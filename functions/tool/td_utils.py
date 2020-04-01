@@ -1045,23 +1045,27 @@ def td_plot(td, y, **kwargs):
         if not(subplot):
             subplot = (len(y),1)
         fig, axs = plt.subplots(nrows = subplot[0], ncols = subplot[1], sharex=sharex, sharey=sharey)
-        # Convert to flatten list
-        axs = flatten_list(axs.tolist())
     else:
         axs = axs_external
         if axs.ndim == 1:
             subplot = (axs.shape[0],1)
         else:
             subplot = axs.shape
-        # Convert to flatten list
-        axs = flatten_list(axs.tolist())
+    # Convert to flatten list
+    if axs.ndim == 1:
+        axs_list = axs.tolist()
+    else:
+        axs_list = []
+        for sub_x in range(subplot[0]):
+            for sub_y in range(subplot[1]):
+                axs_list.append(axs[sub_x][sub_y])
     
     # Find bottom plots
-    axes_pos = np.array([ax._position.bounds[1] for ax in axs])
+    axes_pos = np.array([ax._position.bounds[1] for ax in axs_list])
     bottom_idx = np.where( (axes_pos - min(axes_pos)<0.01 ))[0]
     
-    if subplot[0]*subplot[1] != len(y):
-        raise Exception('ERROR: axs and y have different length: axs: {} != y: {}'.format(len(axs),len(y)))
+    if len(axs_list) != len(y):
+        raise Exception('ERROR: axs and y have different length: axs: {} != y: {}'.format(len(axs_list),len(y)))
     
     # Add title to figure
     if title != None:
@@ -1159,9 +1163,8 @@ def td_plot(td, y, **kwargs):
         x_ticks_list = ['off'] * len(y)
     
     # Plot
-    n_plots = len(y)
     for iPlt, (x, signal, xlim, ylim, xlab, ylab, col, style, x_tick, ax) in \
-        enumerate(zip(x_list, y, xlim_list, ylim_list, xlab_list, ylab_list, col_list, style_list, x_ticks_list, axs)):
+        enumerate(zip(x_list, y, xlim_list, ylim_list, xlab_list, ylab_list, col_list, style_list, x_ticks_list, axs_list)):
         # break
         # Set plot title
         if type(signal) is list:

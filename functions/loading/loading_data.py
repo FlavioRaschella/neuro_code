@@ -33,6 +33,7 @@ class folmat_type(Enum):
     ns6 = '.ns6'
     mat = '.mat'
     csv = '.csv'
+    txt = '.txt'
 
 def load_data_from_folder(folders, **kwargs):
     '''
@@ -40,32 +41,66 @@ def load_data_from_folder(folders, **kwargs):
 
     Parameters
     ----------
-    folders : str / list of str
+    folders : str / list of str, len (_folders)
         Path(s) where to find the data.
-    files_number : list of int / list of list of int
-        Number(s) of the files to load.
-    files_name : list of str
-        Names of the files to load.
-    files_format : str
-        Format of the files to collect.
+        
+    files_number : int, list of int / list of list of int, optional
+        Number(s) of the files to load. If list of list, it refers to the case
+        with loading from multiple folders (e.g. [[1,2,3],[4,5,6]]).
+        
+    files_name : str / list of str / list of list of str, optional
+        Names of the files to load. If list of list, it refers to the case
+        with loading from multiple folders (e.g. [['file1'],['file1','file2']]).
+        
+    files_format : str, optional
+        Format of the files to collect. Possible values are: '.txt','.csv','.mat'.
+        The default is '.mat'.
+        
     pre_ext : str, optional
-        Name that distinguish the file (between file_num and files_format)
+        Part of the name that distinguish the file (between file_num and 
+        files_format). Example: in 'file1_gait.mat' --> pre_ext = '_gait'.
+        The default is ''.
+        
+    start_line : int, optional
+        Starting line for reading file. This is used for .csv and .txt files.
+        The default is 0.
+        
+    fields : str / list of str, optional
+        Fields to read in file. This is used for .csv and .txt files.
+        The default is None.
+        
+    delimiter : str, optional
+        The string used to separate values. This is used for .csv and .txt files.
+        The default is '\t'.
+        
+    dtype : dtype, optional
+        Data type of the resulting array. If None, the dtypes will be 
+        determined by the contents of each column, individually.
+        This is used for .txt files. The default is None.
+        Example: dtype=[('myint','i8'),('myfloat','f8'),('mystring','S5')]
+        
+    reduce_lists : bool, optional
+        Reduce lists with one element to the element itself. The default is True.
+        
     verbose : bool, optional
-        Print what is happening on the function.
+        Narrate what is happening on the function. The default is False.
 
     Returns
     -------
-    td : dict / list of dict
+    td : dict / list of dict, len (n_td)
         Trial(s) data.
 
     Example
     -------
         folders = ['/Volumes/STN_CHINA/HH10/HH10_20190228', '/Volumes/STN_CHINA/HH10/HH10_20190228']
-        file_num = [[],[1,2]]
-        files_format = '.ns6'
-        td = load_data_from_folder(folders = folders,file_num = file_num,files_format = files_format, pre_ext = 'trial')
-
+        file_num = [[4],[1,2]]
+        files_format = '.mat'
+        td = load_data_from_folder(folders = folders,
+                                   files_number = file_num,
+                                   files_format = files_format,
+                                   pre_ext = 'trial')
     '''
+    
     # Input variables
     files_number = None
     files_name = None
@@ -73,10 +108,13 @@ def load_data_from_folder(folders, **kwargs):
     pre_ext = ''
     verbose = False
     reduce_lists = True
-    
-    # Input for csv
-    start_line = 0
-    fields = None
+        
+    # Input for csv & txt
+    start_line_ = 0
+    fields_ = None
+    # Extensions for txt
+    delimiter_ = '\t'
+    dtype_ = None
     
     # Function variables
     folders_list = []
@@ -96,9 +134,13 @@ def load_data_from_folder(folders, **kwargs):
         elif key == 'reduce_lists':
             reduce_lists = value
         elif key == 'start_line':
-            start_line = value
+            start_line_ = value
+        elif key == 'delimiter':
+            delimiter_ = value
+        elif key == 'dtype':
+            dtype_ = value
         elif key == 'fields':
-            fields = value
+            fields_ = value
         elif key == 'verbose':
             verbose = value
 
@@ -182,6 +224,7 @@ def load_data_from_folder(folders, **kwargs):
         print('Files to load...')
         for folder, files in zip(folders_list, files_list):
             print(os.path.join(folder,files))
+        print(' ')
     
     # Insert into dict lambda funtion
     insert = lambda _dict, obj, pos: {k: v for k, v in (list(_dict.items())[:pos] + list(obj.items()) + list(_dict.items())[pos:])}
@@ -199,32 +242,66 @@ def load_data_from_folder(folders, **kwargs):
             td_dict_tmp = load_data_from_file(folder,file,files_format)
             
         elif files_format == folmat_type.csv.value:
-            td_dict_tmp = load_data_from_file(folder,file,files_format, start_line = start_line, fields = fields)
+            td_dict_tmp = load_data_from_file(folder,file,files_format, 
+                                              start_line = start_line_, 
+                                              fields = fields_, 
+                                              verbose = verbose)
+            
+        elif files_format == folmat_type.txt.value:
+            td_dict_tmp = load_data_from_file(folder,file,files_format,
+                                              start_line = start_line_,
+                                              fields = fields_,
+                                              delimiter = delimiter_,
+                                              dtype = dtype_, 
+                                              verbose = verbose)
             
         td_dict_tmp = insert(td_dict_tmp,{'Folder':folder ,'File':file},0)
         if reduce_lists:
             td_dict_tmp = reduce_one_element_list(td_dict_tmp)
         td.append(td_dict_tmp)
     
-    print('DATA LOADED!')
+    print('\nDATA LOADED!')
     return td
-    # End of load_data_from_folder
     
-"""
-This function loads a file based on its format
-""" 
+
 def load_data_from_file(folder,file,file_format, **kwargs):
     '''
-    This function loads the data from a file.
+    This function loads the data from a file depending on their format.
 
     Parameters
     ----------
     folders : str
         Path where to find the data.
+        
     files : str
-        Name of the file to load
+        Name of the file to load.
+        
     files_format : str
-        Format of the data to collect.
+        Format of the files to collect. Possible values are: '.txt','.csv','.mat'.
+        
+    start_line : int, optional
+        Starting line for reading file. This is used for .csv and .txt files.
+        The default is 0.
+        
+    fields : str / list of str, optional
+        Fields to read in file. This is used for .csv and .txt files.
+        The default is None.
+        
+    delimiter : str, optional
+        The string used to separate values. This is used for .csv and .txt files.
+        The default is '\t'.
+        
+    dtype : dtype, optional
+        Data type of the resulting array. If None, the dtypes will be 
+        determined by the contents of each column, individually.
+        This is used for .txt files. The default is None.
+        Example: dtype=[('myint','i8'),('myfloat','f8'),('mystring','S5')]
+        
+    reduce_lists : bool, optional
+        Reduce lists with one element to the element itself. The default is True.
+        
+    verbose : bool, optional
+        Narrate what is happening on the function. The default is False.
     
     Returns
     -------
@@ -232,26 +309,31 @@ def load_data_from_file(folder,file,file_format, **kwargs):
         Dictionary of the data contained in the file.
 
     '''
-    
-    start_line = 0
-    fields = None
+    # Input variables
+    start_line_ = 0
+    fields_ = None
+    delimiter_ = '\t'
+    dtype_ = None
+    verbose = False
     
     # Check input variables
     for key,value in kwargs.items():
         key = key.lower()
         if key == 'start_line':
-            start_line = value
+            start_line_ = value
         elif key == 'fields':
-            fields = value
+            fields_ = value
+        elif key == 'delimiter':
+            delimiter_ = value
+        elif key == 'dtype':
+            dtype_ = value
+        elif key == 'verbose':
+            verbose = value
     
-    print('Opening file {}...'.format(os.path.join(folder,file)))
+    if verbose: print('Opening file {}...'.format(os.path.join(folder,file)))
     if (file_format == folmat_type.ns3.value or file_format == folmat_type.ns6.value):
-        # Open file
-        try:
-            nsx_file = NsxFile(os.path.join(folder,file))
-        except Exception:
-            raise Exception('ERROR: File {} does not exist!'.format(os.path.join(folder,file)))
-            
+        # Load nsx
+        nsx_file = NsxFile(os.path.join(folder,file))
         
         # Extract data - note: data will be returned based on *SORTED* elec_ids, see cont_data['elec_ids']
         data = nsx_file.getdata()
@@ -261,11 +343,8 @@ def load_data_from_file(folder,file,file_format, **kwargs):
         nsx_file.close()
         
     elif file_format == folmat_type.nev.value:
-        # Open file
-        try:
-            nev_file = NevFile(os.path.join(folder,file))
-        except Exception:
-            raise Exception('ERROR: File {} does not exist!'.format(os.path.join(folder,file)))
+        # Load nev
+        nev_file = NevFile(os.path.join(folder,file))
         
         # Extract data and separate out spike data
         # Note, can be simplified: spikes = nev_file.getdata(chans)['spike_events'], shown this way for general getdata() call
@@ -287,14 +366,32 @@ def load_data_from_file(folder,file,file_format, **kwargs):
             raise Exception('ERROR: {} MAT file is not saved as a dict!'.format(os.path.join(folder,file)))
         
     elif file_format == folmat_type.csv.value:
-        # Try loading csv files        
-        data = load_csv_file(os.path.join(folder,file), start_line, fields)
+        # Load csv files        
+        data = load_csv_file(filename = os.path.join(folder,file),
+                             fields = fields_,
+                             start_line = start_line_,
+                             verbose = verbose)
+        if type(data) is not dict:
+            raise Exception('ERROR: {} CSV file is not saved as a dict!'.format(os.path.join(folder,file)))
+        
+    elif file_format == folmat_type.txt.value:
+        # Load txt files        
+        data = load_txt_file(filename = os.path.join(folder,file),
+                             fields = fields_,
+                             delimiter = delimiter_, 
+                             dtype = dtype_,
+                             start_line = start_line_)
+        if type(data) is not dict:
+            raise Exception('ERROR: {} CSV file is not saved as a dict!'.format(os.path.join(folder,file)))
         
     return data
-    # End of load_data_from_file
 
+# =============================================================================
+# Loading functions for each format
+# =============================================================================
 
-def load_csv_file(filename, start_line = 0, fields = None):
+# CSV files
+def load_csv_file(filename, fields = None, start_line = 0, verbose = False):
     
     table = []
     with open(filename, 'r') as f:
@@ -311,7 +408,7 @@ def load_csv_file(filename, start_line = 0, fields = None):
             output[field] = []
         table_n = len(table)
         for iR, row in enumerate(table):
-            if iR%10000 == 0: print('Creating dict. Row: {}/{}'.format(iR+1,table_n))
+            if verbose and iR%10000 == 0: print('Creating dict. Row: {}/{}'.format(iR+1,table_n))
             if len(row) == len(fields):
                 for row_el, field in zip(row,fields):
                     output[field].append(row_el)
@@ -320,7 +417,21 @@ def load_csv_file(filename, start_line = 0, fields = None):
         
     return output
 
+# TXT files
+def load_txt_file(filename, fields, delimiter = '\t', dtype = None, start_line = 0):
+    # Collect data in txt file
+    table = np.genfromtxt(filename, delimiter = delimiter , skip_header = start_line,
+                      dtype = dtype, names = fields)
+    # Store data in dict
+    output = dict()
+    for key in table.dtype.names:
+        output[key] = table[key]
+                
+    return output
+
+# MAT files
 def load_mat_file(_file):
+    # Load mat file using either h5py or scipy.io.loadmat
     for fun in h5py.File, scipy.io.loadmat:
         try:
             return fun(_file)
@@ -328,42 +439,13 @@ def load_mat_file(_file):
             pass
     raise Exception('ERROR: File {} does not exist!'.format(_file))
 
-"""
-This function remove list enclosure
-e.g. [[[]]] --> []
-""" 
-def reduce_list(_var):
-    
-    while type(_var) is list and len(_var) == 1:
-        _var = _var[0]
-    
-    return _var
-
-"""
-This function transpose an column array to a raw array
-e.g. (n,1) --> (1,n)
-""" 
-def invert_to_column(_var):
-    if type(_var) and _var.shape != (1,):
-        if _var.shape[0] > _var.shape[1]:
-            _var = _var.T
-        
-    return _var
-
-"""
-This function recognise whether the input variable is a matlab struct
-""" 
-def is_mat_struc(_var):
-    is_struct = False
-    if _var.dtype.names is not None:
-        is_struct = True
-        
-    return is_struct
+# =============================================================================
+# Utility functions for importing a .mat file
+# =============================================================================
 
 """
 This function reduce a matlab struct to its core, in order to extract its fields
 """ 
-
 def reduce_mat_array(val,kind = None):
     if val.ndim == 2 and 1 in val.shape:
         if val.shape == (1,1):
@@ -464,13 +546,13 @@ def reduce_one_element_list(_td):
 
     Parameters
     ----------
-    td : dict / list of dict
+    td : dict / list of dict, len (n_td)
         Trial(s) data.
 
     Returns
     -------
-    td : dict / list of dict
-        Trial(s) data.
+    td : dict / list of dict, len (n_td)
+        Trial(s) data where list elements ot len == 1 are reduced to the element itself.
 
     '''
     

@@ -68,37 +68,64 @@ def sgolay_filter(data, win_len, order=5):
     return data - savgol_filter(x = data, window_length = win_len, polyorder = order)
 
 
-# Moving average
-def average(data, periods):
+# Average
+def average(data):
     '''
-    Compute the average for a defined period.
+    Compute the average over the data.
 
     Parameters
     ----------
-    data : numpy array
-        1D dataset over which computing the moving average.
-    periods : int
-        Period in samples over which computing the moving average.
+    data : np.ndarray, shape (n_samples, n_channels)
+        Data over which computing the average.
 
     Returns
     -------
-    data_out : numpy array
-        Signal average.
+    data_out : np.ndarray, shape (n_channels,)
+        Average of the data.
 
     '''
-    if type(data) == np.ndarray and len(data.shape) == 2:
-        data_out = np.empty(shape = (data.shape[0], data.shape[1]-periods+1))
-        for idx, dt in enumerate(data):
-            weights = np.ones(periods) / periods
-            data_out[idx,:] = np.convolve(dt, weights, mode='valid')
-    else:
-        weights = np.ones(periods) / periods
-        data_out = np.convolve(data, weights, mode='valid')
-    return data_out
-
-def moving_average(data, periods):
-    return print('To be implemented!')
+    if type(data) != np.ndarray:
+        raise Exception('ERROR: data in input must be a np.ndarray! It is a {}'.format(type(data)))
     
+    if data.ndim == 1:
+        data = np.expand_dims(data,axis = 1)
+    
+    return np.ma.average(data,axis=0).data
+
+# Moving average
+def moving_average(data, win_step, win_size):
+    '''
+    Compute the moving average over the data.
+
+    Parameters
+    ----------
+    data : np.ndarray, shape (n_samples, n_channels)
+        Data over which computing the moving average.
+    win_step : int
+        Step of the sliding window. win_step is in samples.
+    win_size : int
+        Size of the sliding window. win_size is in samples.
+
+    Returns
+    -------
+    data_out : np.ndarray, shape (n_windows, n_channels).
+        Signal average. n_windows = round((n_samples - win_size)/win_step)
+        
+    '''
+    if type(data) != np.ndarray:
+        raise Exception('ERROR: data in input must be a np.ndarray! It is a {}'.format(type(data)))
+    
+    if data.ndim == 1:
+        data = np.expand_dims(data,axis = 1)
+    
+    n_samples = data.shape[0]
+    wins_start = np.arange(0,n_samples-win_size,win_step).astype('int')
+    
+    data_out = []
+    for win_start in wins_start:
+        data_out.append(average(data[win_start : win_start+ win_size, :]))
+    
+    return np.array(data_out)
 
 # Envelope
 def envelope(data, Fs, lowcut = 0, highcut = 0, method = 'squared', order = 4):

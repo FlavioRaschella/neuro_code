@@ -201,8 +201,10 @@ def epochs_separation(data, good_epochs, Fs, print_figure = False):
     return epochs
     
 def convert_points_to_target_vector(points, vector):
-    """
-
+    '''
+    This function converts an array of points into a target vector.
+    [1,4,6] --> [0 1 0 0 1 0 1]
+    
     Parameters
     ----------
     points : list of np.array
@@ -215,7 +217,7 @@ def convert_points_to_target_vector(points, vector):
     vector_target : np.array
         vector with pointes remapped.
 
-    """
+    '''
     from utils import find_first
     
     if type(points) is np.ndarray:
