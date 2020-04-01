@@ -92,13 +92,36 @@ def load_data_from_folder(folders, **kwargs):
 
     Example
     -------
-        folders = ['/Volumes/STN_CHINA/HH10/HH10_20190228', '/Volumes/STN_CHINA/HH10/HH10_20190228']
-        file_num = [[4],[1,2]]
+        folders = ['/Volumes/PATH1/PATH2', '/Volumes/PATH1/PATH3']
+        files_number = [[4],[1,2]]
         files_format = '.mat'
         td = load_data_from_folder(folders = folders,
-                                   files_number = file_num,
+                                   files_number = files_number,
                                    files_format = files_format,
                                    pre_ext = 'trial')
+        
+        folders = '/Volumes/PATH1/PATH2'
+        files_name = ['FILE1','FILE2']
+        files_format = '.txt'
+        delimiter = '\t'
+        fields = ['time','field1','filed2']
+        start_line = 26
+        td = load_data_from_folder(folders = folders,
+                                   files_name = files_name,
+                                   files_format = files_format,
+                                   fields = fields,
+                                   delimiter = delimiter,
+                                   start_line = start_line)
+        
+        folders = '/Volumes/PATH1/PATH2'
+        files_name = 'FILE1'
+        files_format = '.csv'
+        fields = ['time','field1','filed2']
+        td = load_data_from_folder(folders = folders,
+                                   files_name = files_name,
+                                   files_format = files_format,
+                                   fields = fields,
+                                   verbose = True)
     '''
     
     # Input variables
