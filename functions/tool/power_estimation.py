@@ -40,13 +40,20 @@ def nextpow2(x):
     return math.ceil(math.log2(np.abs(x)))
 
 def pow2db(data):
-    """
-    ydB = 10*log10(y);
-    ydB = db(y,'power');
-    We want to guarantee that the result is an integer
-    if y is a negative power of 10.  To do so, we force
-    some rounding of precision by adding 300-300.
-    """
+    '''
+    This function converts power amplitude to db.
+    
+    Parameters
+    ----------
+    data : np.ndarray, shape (n_samples, n_channels)
+        Input data vector.
+        
+    Returns
+    -------
+    data : np.ndarray, shape (n_windows, n_channels)
+        Input data vector in db.
+        
+    '''
     return (10.*np.log10(data)+300)-300;
     
 
@@ -80,18 +87,22 @@ def pmtm(data, NW = 4, Fs = None, NFFT = None):
     
     Parameters
     ----------
-    data : TYPE
+    data : np.ndarray, shape (n_samples, n_channels)
         Input data vector.
-    Fs : TYPE
-        The sampling frequency.
-    tapers : TYPE
-        Matrix containing the discrete prolate spheroidal sequences (dpss).
-    NFFT : TYPE
-        Number of frequency points to evaluate the PSD at.
+        
+    NW : int / float, optional
+        Time Half-Bandwidth Product. The default is 4.
+        
+    Fs : int / float, optional
+        Sampling frequency. The default is 2*np.pi.
+        
+    NFFT : int, optional
+        Length of the signal for the FFT analisys. The default value is
+        max(256, 2**nextpow2(n_samples)).
 
     Returns
     -------
-    Sk : TYPE
+    Sk : np.ndarray, shape (n_windows, n_channels)
         Power spectrum computed via MTM.
 
     '''
@@ -131,28 +142,35 @@ def pmtm(data, NW = 4, Fs = None, NFFT = None):
     return Sk_complex, Sk, w, NFFT
 
 
-def compute_psd(Sk, w, NFFT, Fs = None, unit = None):
+def compute_psd(Sk, w, NFFT, Fs = None, unit = 'power'):
     '''
     Compute the 1-sided PSD [Power/freq].
     Also, compute the corresponding freq vector & freq units.
 
     Parameters
     ----------
-    Sk : np.ndarray
+    Sk : np.ndarray, shape (n_samples, n_freq)
         Whole power spectrum [Power]; it can be a vector or a matrix.
-        For matrices the operation is applied to each column..
-    w : np.ndarray
+        For matrices the operation is applied to each column.
+        
+    w : np.ndarray, shape (n_freq, )
         Frequency vector in rad/sample or in Hz.
+        
     NFFT : int
-        Number of frequency points.
-    Fs : int / float
-        Sampling Frequency.
+        Length of the signal for the FFT analisys.
+        
+    Fs : int / float, optional
+        Sampling Frequency. The default is 2*np.pi.
+        
+    unit : str, optional
+        Output unit of the psd. The default is 'power'.
         
     Returns
     -------
-    psd : np.ndarray
+    psd : np.ndarray, shape (n_samples, n_freq)
         One-sided PSD
-    w : np.ndarray
+        
+    w : np.ndarray, shape (n_freq, )
         One-sided frequency vector.
         
     '''
@@ -194,6 +212,53 @@ def compute_psd(Sk, w, NFFT, Fs = None, unit = None):
 
 # Multitaper power estimation
 def moving_pmtm(data, win_size, win_step, freq_range, NW = 4, Fs = None, NFFT=None, unit = 'db', verbose=False):
+    '''
+    Compute the power spectrum via Multitapering.
+    If NW == 1, it is a stft (short-time fourier transform). In fact tapers_n = 2*NW-1.
+    
+    Parameters
+    ----------
+    data : np.ndarray, shape (n_samples, n_channels)
+        Input data vector.
+        
+    win_size : int
+        Size of the sliding window for computing the pmtm. It is in samples.
+        
+    win_step : int
+        Step of the sliding window for computing the pmtm. It is in samples.
+        
+    freq_range : list, len (2)
+        Min and max frequencies of the spectogram.
+        
+    NW : int, optional, optional
+        Time Half-Bandwidth Product for computing the pmtm. The default is 4.
+        
+    Fs : int / float, optional
+        Sampling frequency. The default is 2*np.pi.
+        
+    NFFT : int, optional
+        Length of the signal for the FFT analisys. The default value is
+        max(256, 2**nextpow2(n_samples)).
+        
+    unity : str, optional
+        Unity of the output computed power. It can be 'power' or 'db'. 
+        The default is 'db'.
+        
+    verbose : bool, optional
+        Narrate the several operations in this method. The default is False.
+    
+    Returns
+    -------
+    mt_spectrogram : np.ndarray, shape (n_windows, n_freq, n_channels)
+        Power spectrum computed via MTM over the channels.
+
+    sfreqs : np.ndarray, shape (n_freq,)
+        Array of frequencies of the spectograms.
+
+    stimes : np.ndarray, shape (n_windows,)
+        Array of time instants of the spectograms.
+
+    '''
     # For Short-time fourier transform NW = 1
     # In fact NW = (tapers_n + 1)/2
     
@@ -238,15 +303,17 @@ def moving_pmtm(data, win_size, win_step, freq_range, NW = 4, Fs = None, NFFT=No
     
     return mt_spectrogram, sfreqs, stimes
 
+
 def get_informative_bands(mt_spectrogram, sfreqs = [], plot = None):
     '''
     This function computes the most informative bands.
 
     Parameters
     ----------
-    mt_spectrogram : np.ndarray [time x freq]
+    mt_spectrogram : np.ndarray, shape (n_samples, n_freq)
         Spectogram if the signal.
-    sfreqs : np.ndarray, optional
+        
+    sfreqs : np.ndarray, shape (n_freq, ), optional
         Frequency band over which the mt_spectrogram was computed.
         
     Returns
@@ -264,7 +331,7 @@ def get_informative_bands(mt_spectrogram, sfreqs = [], plot = None):
     elif plot:
         plt.plot(sfreqs, spect_info_band)
         
-    return spect_info_band
+    return spect_info_band, spect_mean
 
 # EOF
     
