@@ -455,6 +455,7 @@ def load_txt_file(filename, fields, delimiter = '\t', dtype = None, start_line =
 # MAT files
 def load_mat_file(_file):
     # Load mat file using either h5py or scipy.io.loadmat
+    h5py.get_config().default_file_mode = 'r'
     for fun in h5py.File, scipy.io.loadmat:
         try:
             return fun(_file)

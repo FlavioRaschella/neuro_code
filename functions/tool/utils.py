@@ -11,6 +11,33 @@ import pickle
 import os
 import copy
 
+def find_substring_indexes(input_str, search_str):
+    '''
+    This function looks for substrings in a string 
+
+    Parameters
+    ----------
+    input_str : str
+        String where to look for the substring.
+    search_str : str
+        Substring to look for.
+
+    Returns
+    -------
+    indexes : list
+        List of indexes where the substring is found.
+
+    '''
+    indexes = []
+    index = 0
+    while index < len(input_str):
+        i = input_str.find(search_str, index)
+        if i == -1:
+            return indexes
+        indexes.append(i)
+        index = i + 1
+    return indexes
+
 def group_fields(_dict, _fields, direction = 'column'):
     '''
     This function groups the data in the fields of a dict

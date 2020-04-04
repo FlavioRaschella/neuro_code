@@ -1298,8 +1298,8 @@ def load_pipeline(**kwargs):
         combine_dicts(td, td_target, inplace = True)
     
     if convert_fields_to_numeric_array_dict != None:
-        td = convert_fields_to_numeric_array(td, _fields = convert_fields_to_numeric_array_dict['fields'], 
-                                        _vector_target_field = convert_fields_to_numeric_array_dict['target_vector'])    
+        td = convert_fields_to_numeric_array(td, fields = convert_fields_to_numeric_array_dict['fields'], 
+                                             vector_target_field = convert_fields_to_numeric_array_dict['target_vector'])    
     
     if params != None:
         add_params(td, params)

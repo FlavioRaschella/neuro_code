@@ -49,18 +49,23 @@ from matplotlib import cm
 # Enumerator library
 from enum import Enum
 # Import utilities
-from utils import bipolar, add, flatten_list, transpose, copy_dict
+from utils import bipolar, add, flatten_list, transpose, copy_dict, find_values
 
 import copy
 
 # Plotting events characteristics
 class event_color(Enum):
-    FS = 'r'
-    FO = 'c'
+    R = [1,0,0]
+    L = [0,1,1]
+    O = [1,1,0]
 
 class event_linestyle(Enum):
-    R = '-'
-    L = '--'
+    FS = '-'
+    HS = '-'
+    FO = '--'
+    TO = '--'
+    O = '--'
+    
 
 # =============================================================================
 # Control fields
@@ -99,7 +104,7 @@ def is_field(_td, _fields, verbose = False):
         _fields = [_fields]
         
     if type(_fields) is not list:
-        raise Exception('ERROR: _str must be a list of strings!')
+        raise Exception('ERROR: _fields must be a list of strings!')
     
     # Flatten list of fields
     _fields = flatten_list(_fields)
@@ -938,7 +943,8 @@ def td_plot(td, y, **kwargs):
     save : bool, optional
         Flag for saving the figure.
 
-    Example:
+    Example
+    ----------
         td_plot(td,['LFP_BIP7','LFP_BIP9'], events = ['RFS','LFS'], subplot = (2,1))
 
     '''
@@ -1023,11 +1029,6 @@ def td_plot(td, y, **kwargs):
     # Check whether _signals elements are in _td
     if not(is_field(td, y)):
         raise Exception('ERROR: _signals must be in _td!')
-
-    # Check whether gait_field elements are in _td
-    if events != None:
-        if not(is_field(td, events)):
-            raise Exception('ERROR: {} must be in _td!'.format(events))
     
     # Saving paramters
     if type(save_format) is str:
@@ -1161,10 +1162,26 @@ def td_plot(td, y, **kwargs):
         x_ticks_list = ['on'] * len(y)
     else:
         x_ticks_list = ['off'] * len(y)
-    
+
+    # Check events
+    if events != None:
+        if type(events) is str:
+            events_list = [[events]] * len(y)
+        elif type(events) is list and type(events[0]) is not list:
+            events_list =  [events] * len(y)
+        elif type(events) is list and type(events[0]) is list:
+            events_list = events
+            if len(events_list) != len(y):
+                raise Exception('ERROR: events list of list length {} != y length {}!'.format(len(events),len(y)))
+        
+        if not(is_field(td, flatten_list(events))):
+            raise Exception('ERROR: all events must be in td!')
+    else:
+        events_list = [[]] * len(y)
+
     # Plot
-    for iPlt, (x, signal, xlim, ylim, xlab, ylab, col, style, x_tick, ax) in \
-        enumerate(zip(x_list, y, xlim_list, ylim_list, xlab_list, ylab_list, col_list, style_list, x_ticks_list, axs_list)):
+    for iPlt, (x, signal, xlim, ylim, xlab, ylab, col, style, x_tick, event_list, ax) in \
+        enumerate(zip(x_list, y, xlim_list, ylim_list, xlab_list, ylab_list, col_list, style_list, x_ticks_list, events_list, axs_list)):
         # break
         # Set plot title
         if type(signal) is list:
@@ -1186,12 +1203,13 @@ def td_plot(td, y, **kwargs):
             ax.set_ylabel(ylabel)
                 
         # Get dimension of the singal in input
-        signal_dim = td[signal[0]].ndim
+        signal_dim = np.array(td[signal[0]]).ndim
             
         # Set axes limits
         if signal_dim == 1:
             if type(ylim) == tuple:
-                ax.set_ylim(ylim)
+                ylim_tmp = ylim
+                ax.set_ylim(ylim_tmp)
             else:
                 if ax.get_ylim() == (0,1): # It is a new figure
                     ylim_tmp = [+np.inf, -np.inf] # Start to set up the yaxis
@@ -1219,7 +1237,7 @@ def td_plot(td, y, **kwargs):
         for sig, c, s in zip(signal, col, style):
             # break
             # Get dimension of the singal
-            signal_dim = td[sig].ndim
+            signal_dim = np.array(td[sig]).ndim
             if signal_dim == 1:
                 if x == None:
                     if c == None:
@@ -1256,7 +1274,7 @@ def td_plot(td, y, **kwargs):
                     except:
                         cs = ax.contourf(X, Y, td[sig].T, cmap=c)
                 fig.colorbar(cs, ax = ax)
-                
+        
         # Manage ticks
         if x_tick == 'off' and iPlt not in bottom_idx:
             ax.tick_params(
@@ -1265,22 +1283,33 @@ def td_plot(td, y, **kwargs):
                 bottom=False,      # ticks along the bottom edge are off
                 top=False,         # ticks along the top edge are off
                 labelbottom=False) # labels along the bottom edge are off
-                
+        
         # Plot gait events
-        if events != None:
-            for event in events:
+        if len(event_list) != 0:
+            for event in event_list:
                 if 'R' in event:
-                    line_style = event_linestyle.R.value
+                    col = event_color.R.value
+                elif 'L' in event:
+                    col = event_color.L.value
                 else:
-                    line_style = event_linestyle.L.value
-                    
-                if 'FS' in event:
-                    col = event_color.FS.value
+                    col = event_color.O.value
+                
+                if 'FS' in event or 'HS' in event:
+                    line_style = event_linestyle.FS.value
+                elif 'FO' in event or 'TO' in event:
+                    line_style = event_linestyle.FO.value
                 else:
-                    col = event_color.FO.value
-                    
-                for ev in td[event]:
-                    ax.axvline(ev,ylim[0], ylim[1], color = col, linestyle = line_style)
+                    line_style = event_linestyle.O.value
+                
+                if len(td[event]) == len(td[signal[0]]):
+                    events_2_plot = find_values(td[event], value = 0.9, method = 'bigger')
+                    if x != None:
+                        events_2_plot = td[x][events_2_plot]
+                else:
+                    events_2_plot = td[event]
+                
+                for ev in events_2_plot:
+                    ax.axvline(x = ev, ymin = 0, ymax = 1, color = col + [0.7], linestyle = line_style)
     
     # Set tight plot
     plt.tight_layout()
@@ -1314,9 +1343,12 @@ def td_plot(td, y, **kwargs):
                 mng.window.showMaximized()
                 fig.savefig(save_name + '.pdf', bbox_inches='tight')
             else:
-                raise Exception('ERROR: wrong save format assignaed!')
+                raise Exception('ERROR: wrong save format assigned!')
     
-    return fig, axs
+    if len(axs_external) == 0:
+        return fig, axs
+    else:
+        return axs
 
 
 if __name__ == '__main__':
