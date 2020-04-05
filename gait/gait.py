@@ -693,9 +693,9 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
         
         # Plot title
         if 'File' in td.keys():
-            plt.suptitle('Stick plot. File: {}\nRHS:1, RTO:2, LHS:3, LTO:4, T_on:5, T_off:6\nSample {}/{}'.format(td['File'],sample_idx,signals_len))
+            plt.suptitle('Stick plot. File: {}\nRHS:1, RTO:2, LHS:3, LTO:4, T_on:5, T_off:6\nSample {}/{}'.format(td['File'],sample_idx,signals_len-1))
         else:
-            plt.suptitle('Stick plot./nRHS:1, RTO:2, LHS:3, LTO:4, T_on:5, T_off:6\nSample {}/{}'.format(sample_idx,signals_len))
+            plt.suptitle('Stick plot./nRHS:1, RTO:2, LHS:3, LTO:4, T_on:5, T_off:6\nSample {}/{}'.format(sample_idx,signals_len-1))
         
         # Check whether there are events
         is_there_an_event = False
@@ -730,7 +730,7 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
         
         key = mutable_object['key']
         if key == 1:
-            if sample_idx < signals_len:
+            if sample_idx < signals_len-1:
                 sample_idx += 1
             if verbose: print('-->')
         elif key == -1:
@@ -742,7 +742,7 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
                 sample_idx += 30
             else:
                 sample_idx = signals_len-1
-            if verbose: print('<--')
+            if verbose: print('-->')
         elif key == -30:
             if sample_idx > 30:
                 sample_idx -= 30
