@@ -401,6 +401,422 @@ def gait_event_manual(td, signals, events, fs, **kwargs):
         savemat('gait_events_' + str(idx) + save_name + '.mat', gait_events, appendmat=True)
 
 # =============================================================================
+# Mark events 3D from stick plot
+# =============================================================================
+def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
+    '''
+    This function helps marking the foot events from the 3d stick plot of the 
+    subject kinematics.
+    
+    Events to mark are hard-coded:
+        RHS: 1
+        RTO: 2
+        LHS: 3
+        LTO: 4
+        Turn_on: 5
+        Turn_off: 6
+    
+    Parameters
+    ----------
+    td : dict
+        Dictionary(ies) containig the kinematic data
+        
+    kinematics : dict
+        Dictionary containing the marker 2D/3D information for each time instant.
+        Separate the dictionary in different body parts: 
+            'leg_r','leg_l','arm_r','arm_l','head','trunk','other'.
+        
+    fs : str / int
+        Sampling frequency.
+        If str, it can either be one key in td or the path in td where to find 
+        the fs in td (e.g. params/data/data).
+            
+    coordinates : list of str, len (n_coordinates), optional
+        Coordinates as ordered in the kinematics dictionary. 
+        The default is ['x','y','z'].
+        
+    offset : int / float, optional
+        Offset for shitfting the gait events. The offset must be in samples.
+        The default value is 0.
+        
+    output_type : str, optional
+        Set whether the output values should be in 'time' or 'samples'.
+        The default value is 'time'.
+        
+    events_file : str, optional
+        Path of an existing file containing marked events. events_file must 
+        contain PATH/FILENAME.FORMAT because this is the way the code regognises
+        the file.
+        
+    save_name : str, optional
+        Set the name of the file where to save the gait events. The default is
+        a file index.
+        
+    verbose : str, optional
+        Narrate the several operations in this method. The default is False.
+        
+    Example
+    ----------
+    leg_r = [['RightLeg_x','RightLeg_y','RightLeg_z'],
+             ['RightFoot_x','RightFoot_y','RightFoot_z']]
+    leg_l = [['LeftLeg_x','LeftLeg_y','LeftLeg_z'],
+             ['LeftFoot_x','LeftFoot_y','LeftFoot_z']]
+    
+    kinematics = {'leg_r': leg_r, 'leg_l': leg_l}
+    events = ['RHS','RTO','LHS','LTO','Turn_on','Turn_off']
+    gait_event_manual_stick_plot(td, kin_info, events, 100, coordinates = ['x','y','z'])
+
+    '''
+    
+    coordinates = ['x','y','z']
+    offset = 0
+    output_type = 'time'
+    events_file = ''
+    save_name = ''
+    verbose = False
+    
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'coordinates':
+            coordinates = value
+        elif key == 'offset':
+            offset = value
+        elif key == 'output_type':
+            output_type = value
+        elif key == 'events_file':
+            events_file = value
+        elif key == 'save_name':
+            save_name = value
+        elif key == 'verbose':
+            verbose = value
+        else:
+            print('WARNING: key "{}" not recognised by the td_plot function...'.format(key))
+    
+    # ========================================================================
+    # Check input variables
+    if type(td) is not dict:
+        raise Exception('ERROR: td must be a dict!')
+    
+    # Check kinematics fields
+    body_parts = ['leg_r','leg_l','arm_r','arm_l','head','trunk','other']
+    for body_part in kinematics.keys():
+        if body_part not in body_parts:
+            raise Exception('ERROR: Possible body parts are "leg_r","leg_l","arm_r","arm_l","head","trunk","other". You inserted "{}" !'.format(body_part))
+            
+    signals = []
+    for k,v in kinematics.items():
+        signals += v
+    signals = flatten_list(signals)
+    
+    if not is_field(td, signals, True):
+        raise Exception('ERROR: signals fields are missing from the trial data!')
+        
+    # check save_name
+    if type(save_name) is not str:
+        raise Exception('ERROR: save_name must be s string. You inputed a "{}".'.format(type(save_name)))
+    if save_name == '' and 'File' in td.keys():
+        save_name = td['File']
+    
+    # Check fs
+    if type(fs) is str:
+        if '/' in fs:
+            fs = td_subfield(td,fs)['fs']
+        else:
+            if is_field(td,fs):
+                fs = td[fs]
+            else:
+                raise Exception('ERROR: input field "{}" missing from td.'.format(fs))
+    elif type(fs) is int or type(fs) is float:
+        pass
+    else:
+        raise Exception('ERROR: fs is not a string/int/float. You inputed a "{}".'.format(type(fs)))
+
+    # Check if there is a file to get the events from
+    if type(events_file) is not str:
+        raise Exception('ERROR: events_file must be s string. You inputed a "{}".'.format(type(events_file)))
+    
+    if events_file != '':
+        indexes_slash = find_substring_indexes(events_file,'/')
+        indexes_point = find_substring_indexes(events_file,'.')
+        if len(indexes_slash) != 0 and len(indexes_point) != 0:
+            folder = events_file[:indexes_slash[-1]]
+            file_name = events_file[indexes_slash[-1]+1:indexes_point[-1]]
+            file_format = events_file[indexes_point[-1]:]
+            gait_events_file = load_data_from_folder(folders = folder, files_name = file_name, files_format = file_format)[0]
+            if 'offset' not in gait_events_file.keys() or\
+                'output_type' not in gait_events_file.keys() or\
+                'fs' not in gait_events_file.keys():
+                raise Exception('ERROR: "offset" or "output_type" or "fs" are missing from the loaded events_file!')
+            if (gait_events_file['offset'] - offset)>0.1:
+                raise Exception('ERROR: "offset" from the loaded events_file "{}" is different from the set offset "{}"!'.format(gait_events_file['offset'],offset))
+            if (gait_events_file['fs'] - fs)>0.1:
+                raise Exception('ERROR: "fs" from the loaded events_file "{}" is different from the set fs "{}"!'.format(gait_events_file['fs'],fs))
+        else:
+            raise Exception('ERROR: events_file must follow the following structure: PATH/FILENAME.FORMAT .')
+    
+    # Set gait event variable
+    events_right = ['RHS', 'RTO']
+    events_left  = ['LHS', 'LTO']
+    events_other = ['Turn_on', 'Turn_off']
+    events = events_right + events_left + events_other
+    
+    # Gait event array for the current file
+    gait_events = dict()
+    for ev in events:
+        gait_events[ev] = np.array([])
+    
+    # If there is a file to get the events from, copy them in gaits_events
+    if events_file != '':
+        for event in gait_events_file.keys():
+            if event in events:
+                if gait_events_file['output_type'] == 'time':
+                    gait_events[event] = (gait_events_file[event]*fs + offset).astype('int')
+                else:
+                    gait_events[event] = (gait_events_file[event] + offset).astype('int')
+    
+    # ========================================================================
+    # Collect points in the space
+    
+    # Get data len
+    signals_len = [len(td[signal]) for signal in signals]
+    if (np.diff(signals_len) > 0.1).any():
+        raise Exception('ERROR: signals have different length! Not possible...')
+    else:
+        signals_len = signals_len[0]
+    
+    kin_var = dict()
+    for body_part in kinematics.keys():
+        kin_var[body_part] = dict()
+        for coordinate in coordinates:
+            kin_var[body_part][coordinate] = np.array([]).reshape(signals_len,0)
+    
+    for body_part, fields in kinematics.items():
+        for field in fields:
+            for coordinate, field_coord in zip(coordinates, field):
+                kin_var[body_part][coordinate] = np.hstack([kin_var[body_part][coordinate], np.array(td[field_coord]).reshape(signals_len,1) ])
+    
+    # ========================================================================
+    # Mark the events using the stickplot
+    
+    mutable_object = {}
+    def press(input_key):
+        sys.stdout.flush()
+        # print('press:{}'.format(input_key.key))
+        if input_key.key == 'right':
+            output = +1
+        elif input_key.key == 'left':
+            output = -1
+        elif input_key.key == 'up':
+            output = +30
+        elif input_key.key == 'down':
+            output = -30
+        elif input_key.key == 'escape':
+            output = 2
+        elif input_key.key == 'backspace':
+            output = 3
+        elif input_key.key == '1':
+            output = events_right[0] #'RHS'
+        elif input_key.key == '2':
+            output = events_right[1] #'RTO'
+        elif input_key.key == '3':
+            output = events_left[0] #'LHS'
+        elif input_key.key == '4':
+            output = events_left[1] #'LTO'
+        elif input_key.key == '5':
+            output = events_other[0] #'Turn_on'
+        elif input_key.key == '6':
+            output = events_other[1] #'Turn_off'
+        else:
+            output = 0
+        mutable_object['key'] = output
+    
+    
+    # Plotting events characteristics
+    body_part_color = {'leg_r' : np.array([240,128,128])/255,
+                       'leg_l' : np.array([60,179,113])/255,
+                       'arm_r' : np.array([178,34,34])/255,
+                       'arm_l' : np.array([34,139,34])/255,
+                       'head'  : np.array([0,191,255])/255,
+                       'trunk' : np.array([138,43,226])/255,
+                       'other' : np.array([125,125,125])/255}
+    
+    # Get axis lim
+    xyz_lim = dict()
+    for coordinate in coordinates:
+        xyz_lim[coordinate] = [+np.inf, -np.inf]
+    
+    for body_part in kin_var.keys():
+        for coordinate in coordinates:
+            if xyz_lim[coordinate][0] > np.min(kin_var[body_part][coordinate]):
+                xyz_lim[coordinate][0] = np.min(kin_var[body_part][coordinate])
+            if xyz_lim[coordinate][1] < np.max(kin_var[body_part][coordinate]):
+                xyz_lim[coordinate][1] = np.max(kin_var[body_part][coordinate])
+
+    # Plot
+    fig = plt.figure()
+    ax = fig.gca(projection='3d')
+    if len(coordinates) == 3:
+        ax.set_xlabel('{} axis'.format(coordinates[0]))
+        ax.set_ylabel('{} axis'.format(coordinates[1]))
+        ax.set_zlabel('{} axis'.format(coordinates[2]))
+        ax.set_xlim(xyz_lim[coordinates[0]])
+        ax.set_ylim(xyz_lim[coordinates[1]])
+        ax.set_zlim(xyz_lim[coordinates[2]])
+    else:
+        ax.set_xlabel('{} axis'.format(coordinates[0]))
+        ax.set_ylabel('{} axis'.format(coordinates[1]))
+        ax.set_xlim(xyz_lim[coordinates[0]])
+        ax.set_ylim(xyz_lim[coordinates[1]])
+    
+    # Flag for stopping the marking
+    not_stop_loop = True
+    # Sample idx
+    sample_idx = 0
+    # Start marking
+    while not_stop_loop:
+        # Plot sticks
+        for body_part, values in kin_var.items():
+            if len(coordinates) == 3:
+                ax.plot(kin_var[body_part][coordinates[0]][sample_idx,:],kin_var[body_part][coordinates[1]][sample_idx,:],kin_var[body_part][coordinates[2]][sample_idx,:], Color = body_part_color[body_part])
+                ax.set_xlabel('{} axis'.format(coordinates[0]))
+                ax.set_ylabel('{} axis'.format(coordinates[1]))
+                ax.set_zlabel('{} axis'.format(coordinates[2]))
+                ax.set_xlim(xyz_lim[coordinates[0]])
+                ax.set_ylim(xyz_lim[coordinates[1]])
+                ax.set_zlim(xyz_lim[coordinates[2]])
+            else:
+                ax.plot(kin_var[body_part][coordinates[0]][sample_idx,:],kin_var[body_part][coordinates[1]][sample_idx,:], Color = body_part_color[body_part])
+                ax.set_xlabel('{} axis'.format(coordinates[0]))
+                ax.set_ylabel('{} axis'.format(coordinates[1]))
+                ax.set_xlim(xyz_lim[coordinates[0]])
+                ax.set_ylim(xyz_lim[coordinates[1]])
+        
+        # Plot title
+        if 'File' in td.keys():
+            plt.suptitle('Stick plot. File: {}\nRHS:1, RTO:2, LHS:3, LTO:4, T_on:5, T_off:6\nSample {}/{}'.format(td['File'],sample_idx,signals_len))
+        else:
+            plt.suptitle('Stick plot./nRHS:1, RTO:2, LHS:3, LTO:4, T_on:5, T_off:6\nSample {}/{}'.format(sample_idx,signals_len))
+        
+        # Check whether there are events
+        is_there_an_event = False
+        for event in gait_events.keys():
+            if gait_events[event].size != 0:
+                if (np.abs(gait_events[event] - sample_idx) < 0.1).any():
+                    is_there_an_event = True
+                    if event in events_right:
+                        part = 'leg_r'
+                        col = body_part_color[part]
+                    elif event in events_left:
+                        part = 'leg_l'
+                        col = body_part_color[part]
+                    elif event in events_other:
+                        part = 'leg_r'
+                        col = 'y'
+                    
+                    if len(coordinates) == 3:
+                        ax.plot([kin_var[part][coordinates[0]][sample_idx,-1]]*2,[kin_var[part][coordinates[1]][sample_idx,-1]]*2, xyz_lim[coordinates[2]], Color = col)
+                    else:
+                        ax.plot([kin_var[part][coordinates[0]][sample_idx,-1]]*2, xyz_lim[coordinates[1]], Color = col)
+                    
+                    ax.text2D(0.05, 0.95, event, transform=ax.transAxes)
+                    
+        # Add text
+        if is_there_an_event == False:
+            ax.text2D(0.05, 0.95, '', transform=ax.transAxes)
+                    
+        # Take a decision by clicking a button
+        fig.canvas.mpl_connect('key_press_event', press)
+        _ = plt.waitforbuttonpress(0) #non specific key press!!!
+        
+        key = mutable_object['key']
+        if key == 1:
+            if sample_idx < signals_len:
+                sample_idx += 1
+            if verbose: print('-->')
+        elif key == -1:
+            if sample_idx > 0:
+                sample_idx -= 1
+            if verbose: print('<--')
+        elif key == +30:
+            if signals_len - sample_idx > 30:
+                sample_idx += 30
+            else:
+                sample_idx = signals_len-1
+            if verbose: print('<--')
+        elif key == -30:
+            if sample_idx > 30:
+                sample_idx -= 30
+            else:
+                sample_idx = 0
+            if verbose: print('<--')
+        elif key == 2:
+            not_stop_loop = False
+            if verbose: print('ESC')
+        elif key == 3: # Remove event
+            del_sample = False
+            for event in gait_events.keys():
+                if (np.abs(gait_events[event] - sample_idx) < 0.1).any():
+                    del_sample = True
+                    del_idx = np.where((np.abs(gait_events[event] - sample_idx) < 0.1))[0]
+                    gait_events[event] = np.delete(gait_events[event], del_idx).astype('int')
+                    print('Sample {} removed from key {}!'.format(sample_idx, event))
+            if del_sample == False: print('No sample removed!')
+            if verbose: print('DEL')
+        elif key == events_right[0]: # RHS
+            if not (np.abs(gait_events[key] - sample_idx) < 0.1).any():
+                gait_events[key] = np.sort(np.insert(gait_events[key],0,sample_idx)).astype('int')
+            if verbose: print('RHS')
+        elif key == events_right[1]: # RTO
+            if not (np.abs(gait_events[key] - sample_idx) < 0.1).any():
+                gait_events[key] = np.sort(np.insert(gait_events[key],0,sample_idx)).astype('int')
+            if verbose: print('RTO')
+        elif key == events_left[0]: # LHS
+            if not (np.abs(gait_events[key] - sample_idx) < 0.1).any():
+                gait_events[key] = np.sort(np.insert(gait_events[key],0,sample_idx)).astype('int')
+            if verbose: print('LHS')
+        elif key == events_left[1]: # LTO
+            if not (np.abs(gait_events[key] - sample_idx) < 0.1).any():
+                gait_events[key] = np.sort(np.insert(gait_events[key],0,sample_idx)).astype('int')
+            if verbose: print('LTO')
+        elif key == events_other[0]: # Turn_on
+            if not (np.abs(gait_events[key] - sample_idx) < 0.1).any():
+                gait_events[key] = np.sort(np.insert(gait_events[key],0,sample_idx)).astype('int')
+            if verbose: print('Turn_on')
+        elif key == events_other[1]: # Turn_off
+            if not (np.abs(gait_events[key] - sample_idx) < 0.1).any():
+                gait_events[key] = np.sort(np.insert(gait_events[key],0,sample_idx)).astype('int')
+            if verbose: print('Turn_off')
+        else:
+            print('Possible keys are: left, right, delete, escape.\nTry again...')
+        
+        plt.draw()
+        plt.cla()
+    # End while
+    plt.close()
+    
+    # ========================================================================
+    # Correct data
+    # Check offset if present
+    if offset != 0:
+        gait_events['offset'] = offset
+        for event in events:
+            gait_events[event] = gait_events[event] - offset
+            
+    # Adjust outcome type
+    if output_type == 'time':
+        gait_events['output_type'] = 'time'
+        for event in events:
+            gait_events[event] = gait_events[event]/fs
+    else:
+        gait_events['output_type'] = 'samples'
+    
+    # Save frequency
+    gait_events['fs'] = fs
+    
+    # Save the data
+    savemat(save_name + '_gait_events.mat', gait_events, appendmat=True)
+
+# =============================================================================
 # Stick plot video
 # =============================================================================
 def stick_plot_video(td, kinematics, **kwargs):
@@ -448,8 +864,8 @@ def stick_plot_video(td, kinematics, **kwargs):
     leg_l = [['LeftLeg_x','LeftLeg_y','LeftLeg_z'],
              ['LeftFoot_x','LeftFoot_y','LeftFoot_z']]
     
-    kin_info = {'leg_r': leg_r, 'leg_l': leg_l}
-    stick_plot(td, kin_info, coordinates = ['x','y','z'], step_plot = 10)
+    kinematics = {'leg_r': leg_r, 'leg_l': leg_l}
+    stick_plot(td, kinematics, coordinates = ['x','y','z'], step_plot = 10)
 
     '''
     
