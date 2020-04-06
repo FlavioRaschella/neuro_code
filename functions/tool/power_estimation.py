@@ -31,8 +31,8 @@ def process_spectrogram_params(window_start, window_size_smp, freq_range, Fs = N
     freq_idx = np.where(np.logical_and(sfreqs>=freq_range[0],sfreqs<=freq_range[1]))[0]
     sfreqs = sfreqs[freq_idx]
     # Time info
-    window_middle_times = window_start + round(window_size_smp/2);
-    stimes = window_middle_times/Fs;
+    window_middle_times = window_start + round(window_size_smp/2)
+    stimes = window_middle_times/Fs
     
     return df, sfreqs, stimes, freq_idx
 
@@ -211,7 +211,7 @@ def compute_psd(Sk, w, NFFT, Fs = None, unit = 'power'):
     return psd, w, units
 
 # Multitaper power estimation
-def moving_pmtm(data, win_size, win_step, freq_range, NW = 4, Fs = None, NFFT=None, unit = 'db', verbose=False):
+def moving_pmtm(data, win_size, win_step, freq_range, norm = None, NW = 4, Fs = None, NFFT=None, unit = 'db', verbose=False):
     '''
     Compute the power spectrum via Multitapering.
     If NW == 1, it is a stft (short-time fourier transform). In fact tapers_n = 2*NW-1.
@@ -230,7 +230,10 @@ def moving_pmtm(data, win_size, win_step, freq_range, NW = 4, Fs = None, NFFT=No
     freq_range : list, len (2)
         Min and max frequencies of the spectogram.
         
-    NW : int, optional, optional
+    norm : np.ndarray, optional
+        Normalisation values for each channel. The default is None.
+        
+    NW : int, optional
         Time Half-Bandwidth Product for computing the pmtm. The default is 4.
         
     Fs : int / float, optional
@@ -259,9 +262,7 @@ def moving_pmtm(data, win_size, win_step, freq_range, NW = 4, Fs = None, NFFT=No
         Array of time instants of the spectograms.
 
     '''
-    # For Short-time fourier transform NW = 1
-    # In fact NW = (tapers_n + 1)/2
-    
+    # Check input variables
     if unit not in ['power','db']:
         raise Exception('ERROR: wrong unit assigned!')
     
@@ -275,18 +276,29 @@ def moving_pmtm(data, win_size, win_step, freq_range, NW = 4, Fs = None, NFFT=No
         data = transpose(data, 'column')
         
     N = data.shape[0]
-    channels = data.shape[1]
+    n_channels = data.shape[1]
+    if verbose:
+        print('Data length: {}. Number of channels: {}.'.format(N,n_channels))
 
     # Set win_size in int format
     win_size = int(win_size)
     win_step = int(win_step)
 
     # Compute pmtm features
-    win_start = np.arange(0,N-win_size,win_step).astype('int')
+    win_start = np.arange(0,N-win_size+1,win_step).astype('int')
     df, sfreqs, stimes, freq_idx = process_spectrogram_params(win_start, win_size, freq_range, Fs)
     
     # Compute spectrogram
-    mt_spectrogram = np.zeros((len(win_start),len(freq_idx),channels))
+    mt_spectrogram = np.zeros((len(win_start),len(freq_idx),n_channels))
+    
+    # If normalisation values are assigned, check that the dimensions fits with
+    # the ones of the spectograms
+    if type(norm) == np.ndarray:
+        norm = transpose(norm,'column')
+        if norm.shape[0] != len(sfreqs):
+            raise Exception('ERROR: normalisation array 1st dimensions "{}" != from spectogram freq dimension {}!'.format(norm.shape[0],len(sfreqs)))
+        if norm.ndim == 2 and norm.shape[1] != n_channels:
+            raise Exception('ERROR: normalisation array 2nd dimensions "{}" != from the number of channels {}!'.format(norm.shape[1],n_channels))
     
     for iWin, win_idx in enumerate(win_start):
         _, Sk, w, NFFT = pmtm(data[win_idx:win_idx+win_size,:], NW, Fs)
@@ -294,11 +306,152 @@ def moving_pmtm(data, win_size, win_step, freq_range, NW = 4, Fs = None, NFFT=No
         # Save values
         mt_spectrogram[iWin,:,:] = psd[freq_idx]
         
+    if type(norm) == np.ndarray:
+        norm_mat = np.tile(norm, (len(stimes),1,1))
+        mt_spectrogram = mt_spectrogram / norm_mat
+        
     # Display spectrogram info
     if verbose:
         display_spectrogram_params(NW, win_size, win_step, df, Fs)
         
-    if channels == 1:
+    if n_channels == 1:
+        mt_spectrogram = np.squeeze(mt_spectrogram)
+    
+    return mt_spectrogram, sfreqs, stimes
+
+
+# Multitaper power estimation around an event
+def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event, post_event, norm = None, NW = 4, Fs = None, NFFT=None, unit = 'db', verbose=False):
+    '''
+    Compute the power spectrum via Multitapering.
+    If NW == 1, it is a stft (short-time fourier transform). In fact tapers_n = 2*NW-1.
+    
+    Parameters
+    ----------
+    data : np.ndarray, shape (n_samples, n_channels)
+        Input data vector.
+        
+    events : list of int, len (n_events)
+        List of events around which to compute the pmtm. It is in samples.
+        
+    win_size : int
+        Size of the sliding window for computing the pmtm. It is in samples.
+        
+    win_step : int
+        Step of the sliding window for computing the pmtm. It is in samples.
+        
+    freq_range : list of float/int, len (2)
+        Min and max frequencies of the spectogram.
+        
+    pre_event : int
+        Samples before the event to use for the pmtm. win_step/2 will be added
+        to pre_event to account for the windowing.
+        
+    post_event : int
+        Samples after the event to use for the pmtm. win_step/2 will be added
+        to pre_event to account for the windowing.
+        
+    norm : np.ndarray, optional
+        Normalisation values for each channel. The default is None.
+        
+    NW : int, optional
+        Time Half-Bandwidth Product for computing the pmtm. The default is 4.
+        
+    Fs : int / float, optional
+        Sampling frequency. The default is 2*np.pi.
+        
+    NFFT : int, optional
+        Length of the signal for the FFT analisys. The default value is
+        max(256, 2**nextpow2(n_samples)).
+        
+    unity : str, optional
+        Unity of the output computed power. It can be 'power' or 'db'. 
+        The default is 'db'.
+        
+    verbose : bool, optional
+        Narrate the several operations in this method. The default is False.
+    
+    Returns
+    -------
+    mt_spectrogram : np.ndarray, shape (n_windows, n_freq, n_events, n_channels)
+        Power spectrum computed via MTM around each event for each channel.
+
+    sfreqs : np.ndarray, shape (n_freq,)
+        Array of frequencies of the spectograms.
+
+    stimes : np.ndarray, shape (n_windows,)
+        Array of time instants of the spectograms.
+
+    '''
+    # Check input variables
+    if unit not in ['power','db']:
+        raise Exception('ERROR: wrong unit assigned!')
+    
+    if type(data) is list:
+        data = np.array(data)
+    
+    if type(events) is int or type(events) is float:
+        events = [events]
+        
+    if type(events) is np.ndarray:
+        events = events.tolist()
+        
+    if type(events) is not list:
+        raise Exception('ERROR: events must be a list! You inputed a "{}"'.format(type(events)))
+    
+    if (type(pre_event) is not int and type(pre_event) is not float) or \
+        (type(post_event) is not int and type(post_event) is not float):
+        raise Exception('ERROR: pre_event and post_event must be either an int or a float! You inputed: pre_event "{}", post_event "{}"'.format(type(pre_event),type(post_event)))
+        
+    # Number of channels
+    if data.ndim == 1:
+        data = np.expand_dims(data, axis=1)
+    else:
+        data = transpose(data, 'column')
+        
+    n_channels = data.shape[1]
+    n_events = len(events)
+    if verbose:
+        print('Number of events: {}. Number of channels: {}.'.format(n_events, n_channels))
+
+    # Set win_size in int format
+    win_size = int(win_size)
+    win_step = int(win_step)
+    pre_event = int(pre_event + win_size/2)
+    post_event = int(post_event + win_size/2)
+    
+    # Compute pmtm features
+    win_start = np.arange(-post_event,pre_event-win_size+1,win_step).astype('int')
+    df, sfreqs, stimes, freq_idx = process_spectrogram_params(win_start, win_size, freq_range, Fs)
+        
+    # Compute spectrogram
+    mt_spectrogram = np.zeros((len(win_start),len(freq_idx),n_events,n_channels))
+    
+    # If normalisation values are assigned, check that the dimensions fits with
+    # the ones of the spectograms
+    if type(norm) == np.ndarray:
+        norm = transpose(norm,'column')
+        if norm.shape[0] != len(sfreqs):
+            raise Exception('ERROR: normalisation array dimensions "{}" != from spectogram freq dimension {}!'.format(norm.shape[0],len(sfreqs)))
+        if norm.ndim == 2 and norm.shape[1] != n_channels:
+            raise Exception('ERROR: normalisation array 2nd dimensions "{}" != from the number of channels {}!'.format(norm.shape[1],n_channels))
+    
+    for iEv, event in enumerate(events):
+        for iWin, win_idx in enumerate(win_start):
+            _, Sk, w, NFFT = pmtm(data[event+win_idx:event+win_idx+win_size,:], NW, Fs)
+            psd, w, _ = compute_psd(Sk, w, NFFT, Fs, unit = unit)
+            # Save values
+            mt_spectrogram[iWin,:,iEv,:] = psd[freq_idx]
+    
+    if type(norm) == np.ndarray:
+        norm_mat = np.tile(np.expand_dims(norm, axis=1), (len(stimes),1,n_events,1))
+        mt_spectrogram = mt_spectrogram / norm_mat
+        
+    # Display spectrogram info
+    if verbose:
+        display_spectrogram_params(NW, win_size, win_step, df, Fs)
+        
+    if n_channels == 1:
         mt_spectrogram = np.squeeze(mt_spectrogram)
     
     return mt_spectrogram, sfreqs, stimes

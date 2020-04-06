@@ -1053,13 +1053,16 @@ def td_plot(td, y, **kwargs):
         else:
             subplot = axs.shape
     # Convert to flatten list
-    if axs.ndim == 1:
-        axs_list = axs.tolist()
+    if type(axs) is np.ndarray:
+        if axs.ndim == 1:
+            axs_list = axs.tolist()
+        else:
+            axs_list = []
+            for sub_x in range(subplot[0]):
+                for sub_y in range(subplot[1]):
+                    axs_list.append(axs[sub_x][sub_y])
     else:
-        axs_list = []
-        for sub_x in range(subplot[0]):
-            for sub_y in range(subplot[1]):
-                axs_list.append(axs[sub_x][sub_y])
+        axs_list = [axs]
     
     # Find bottom plots
     axes_pos = np.array([ax._position.bounds[1] for ax in axs_list])
