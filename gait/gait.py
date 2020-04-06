@@ -401,7 +401,7 @@ def gait_event_manual(td, signals, events, fs, **kwargs):
         savemat('gait_events_' + str(idx) + save_name + '.mat', gait_events, appendmat=True)
 
 # =============================================================================
-# Mark events 3D from stick plot
+# Mark events 2/3D from stick plot
 # =============================================================================
 def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
     '''
@@ -855,8 +855,10 @@ def stick_plot_video(td, kinematics, **kwargs):
         
     events : str / list of str, len (n_events)
         Name of the events to plot.
-        
-        
+    
+    verbose : str, optional
+        Narrate the several operations in this method. The default is False.
+    
     Example:
     ----------
     leg_r = [['RightLeg_x','RightLeg_y','RightLeg_z'],
@@ -979,8 +981,12 @@ def stick_plot_video(td, kinematics, **kwargs):
 
     # Plot
     fig = plt.figure()
-    ax = fig.gca(projection='3d')
-    plt.suptitle('Stick plot. File: {}'.format(td['File']))
+    if len(coordinates) == 3:
+        ax = fig.gca(projection='3d')
+    else:
+        ax = fig.add_subplot(111)
+    if 'File' in td.keys():
+        plt.suptitle('Stick plot. File: {}'.format(td['File']))
     if len(coordinates) == 3:
         ax.set_xlabel('{} axis'.format(coordinates[0]))
         ax.set_ylabel('{} axis'.format(coordinates[1]))
@@ -1012,6 +1018,183 @@ def stick_plot_video(td, kinematics, **kwargs):
         plt.draw()
         plt.pause(pause)
         plt.cla()
+
+# =============================================================================
+# Stick plot at events
+# =============================================================================
+def stick_plot_at_events(td, kinematics, events, **kwargs):
+    '''
+    This function plots the sticks for the kinematics
+    
+    Parameters
+    ----------
+    td : dict
+        Dictionary containig the kinematic data
+    
+    kinematics : dict
+        Dictionary containing the marker 2D/3D information for each time instant.
+        Separate the dictionary in different body parts: 
+            'leg_r','leg_l','arm_r','arm_l','head','trunk','other'.
+    
+    events : str / np.ndarray / list, len (n_events)
+        Name of the events to plot or array with the events to plot. If the type
+        is string, it is considered as an array of zeros with ones where the events
+        occurr.
+    
+    coordinates : list of str, len (n_coordinates)
+        Coordinates as ordered in the kinematics dictionary. 
+        The default is ['x','y','z'].
+    
+    events_plus : int/float, optional
+        Number of samples to plot around the event. The default is 50.
+    
+    events_plus_step : int/float, optional
+        Step in plotting the events_plus. The default is 5.
+        
+    verbose : str, optional
+        Narrate the several operations in this method. The default is False.
+    
+    Example:
+    ----------
+    leg_r = [['RightLeg_x','RightLeg_y','RightLeg_z'],
+             ['RightFoot_x','RightFoot_y','RightFoot_z']]
+    leg_l = [['LeftLeg_x','LeftLeg_y','LeftLeg_z'],
+             ['LeftFoot_x','LeftFoot_y','LeftFoot_z']]
+    
+    kinematics = {'leg_r': leg_r, 'leg_l': leg_l}
+    stick_plot(td, kinematics, coordinates = ['x','y','z'], events_plus = 10)
+    
+    '''
+    
+    coordinates = ['x','y','z']
+    events_plus = 50
+    events_plus_step = 5
+    verbose = False
+    
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'coordinates':
+            coordinates = value
+        elif key == 'events_plus':
+            events_plus = value
+        elif key == 'events_plus_step':
+            events_plus_step = value
+        elif key == 'verbose':
+            verbose = value
+        else:
+            print('WARNING: key "{}" not recognised by the td_plot function...'.format(key))
+    
+    # ========================================================================
+    # Check input variables
+    body_parts = ['leg_r','leg_l','arm_r','arm_l','head','trunk','other']
+    for body_part in kinematics.keys():
+        if body_part not in body_parts:
+            raise Exception('ERROR: Possible body parts are "leg_r","leg_l","arm_r","arm_l","head","trunk","other". You inserted "{}" !'.format(body_part))
+
+    signals = []
+    for k,v in kinematics.items():
+        signals += v
+    signals = flatten_list(signals)
+    
+    if not is_field(td, signals, True):
+        raise Exception('ERROR: signals fields are missing from the trial data!')
+    
+    # Check events input
+    if type(events) is str:
+        if not is_field(td, events, True):
+            raise Exception('ERROR: events fields are missing from the trial data!')
+        events = find_values(td[events],1).tolist()
+    elif type(events) is np.ndarray:
+        events = events.tolist()
+    
+    # ========================================================================
+    # Collect points in the space
+    
+    # Get data len
+    signals_len = [len(td[signal]) for signal in signals]
+    if (np.diff(signals_len) > 0.1).any():
+        raise Exception('ERROR: signals have different length! Not possible...')
+    else:
+        signals_len = signals_len[0]
+    
+    for event in events:
+        if event < 0 or event > signals_len-1:
+            raise Exception('ERROR: an event "{}" is < 0 or > signals_len "{}"!'.format(event,signals_len))
+    
+    kin_var = dict()
+    for body_part in kinematics.keys():
+        kin_var[body_part] = dict()
+        for coordinate in coordinates:
+            kin_var[body_part][coordinate] = np.array([]).reshape(signals_len,0)
+    
+    for body_part, fields in kinematics.items():
+        for field in fields:
+            for coordinate, field_coord in zip(coordinates, field):
+                kin_var[body_part][coordinate] = np.hstack([kin_var[body_part][coordinate], np.array(td[field_coord]).reshape(signals_len,1) ])
+    
+    # ========================================================================
+    # Correct the data using stickplot
+    
+    # Plotting events characteristics
+    body_part_color = {'leg_r' : np.array([240,128,128])/255,
+                       'leg_l' : np.array([60,179,113])/255,
+                       'arm_r' : np.array([178,34,34])/255,
+                       'arm_l' : np.array([34,139,34])/255,
+                       'head'  : np.array([0,191,255])/255,
+                       'trunk' : np.array([138,43,226])/255,
+                       'other' : np.array([125,125,125])/255}
+    
+    # Plot
+    for iEv, event in enumerate(events):
+        if verbose: print('Plotting event {}/{}'.format(iEv+1, len(events)))
+        event_range = np.arange(event - events_plus,event + events_plus + 1, events_plus_step)
+        
+        # Get axis lim
+        xyz_lim = dict()
+        for coordinate in coordinates:
+            xyz_lim[coordinate] = [+np.inf, -np.inf]
+        for body_part in kin_var.keys():
+            for coordinate in coordinates:
+                if xyz_lim[coordinate][0] > np.min(kin_var[body_part][coordinate][event_range,:]):
+                    xyz_lim[coordinate][0] = np.min(kin_var[body_part][coordinate][event_range,:])
+                if xyz_lim[coordinate][1] < np.max(kin_var[body_part][coordinate][event_range,:]):
+                    xyz_lim[coordinate][1] = np.max(kin_var[body_part][coordinate][event_range,:])
+
+        # Plot
+        fig = plt.figure()
+        if len(coordinates) == 3:
+            ax = fig.gca(projection='3d')
+        else:
+            ax = fig.add_subplot(111)
+        if 'File' in td.keys():
+            plt.suptitle('Stick plot. File: {}. Event {}'.format(td['File'], event))
+        else:
+            plt.suptitle('Stick plot. Event {}'.format(event))
+        if len(coordinates) == 3:
+            ax.set_xlabel('{} axis'.format(coordinates[0]))
+            ax.set_ylabel('{} axis'.format(coordinates[1]))
+            ax.set_zlabel('{} axis'.format(coordinates[2]))
+            ax.set_xlim(xyz_lim[coordinates[0]])
+            ax.set_ylim(xyz_lim[coordinates[1]])
+            ax.set_zlim(xyz_lim[coordinates[2]])
+        else:
+            ax.set_xlabel('{} axis'.format(coordinates[0]))
+            ax.set_ylabel('{} axis'.format(coordinates[1]))
+            ax.set_xlim(xyz_lim[coordinates[0]])
+            ax.set_ylim(xyz_lim[coordinates[1]])
+        
+        for idx in event_range:
+            for body_part, values in kin_var.items():
+                if len(coordinates) == 3:
+                    ax.plot(kin_var[body_part][coordinates[0]][idx,:],kin_var[body_part][coordinates[1]][idx,:],kin_var[body_part][coordinates[2]][idx,:], Color = body_part_color[body_part])
+                    ax.set_xlim(xyz_lim[coordinates[0]])
+                    ax.set_ylim(xyz_lim[coordinates[1]])
+                    ax.set_zlim(xyz_lim[coordinates[2]])
+                else:
+                    ax.plot(kin_var[body_part][coordinates[0]][idx,:],kin_var[body_part][coordinates[1]][idx,:], Color = body_part_color[body_part])
+                    ax.set_xlim(xyz_lim[coordinates[0]])
+                    ax.set_ylim(xyz_lim[coordinates[1]])
+
 
 # =============================================================================
 # Plot events

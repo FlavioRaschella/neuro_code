@@ -281,16 +281,16 @@ def find_values(array, value = 1, method = 'equal'):
 
     Parameters
     ----------
-    array : np.ndarray / list
+    array : np.ndarray / list, shape (N,)
         Array of value.
     value : int, optional
         Value to look for in the array. The default is 1.
-    method : str
-        Find values "equal" (=), "bigger" (>),  "smaller" (<).
+    method : str, optional
+        Find values "equal" (=), "bigger" (>),  "smaller" (<). The default is "equal".
 
     Returns
     -------
-    array
+    array : np.ndarray, shape (n_events,)
         Array of indexes.
 
     '''
