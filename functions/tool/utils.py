@@ -309,44 +309,6 @@ def find_values(array, value = 1, method = 'equal'):
         array = np.where(array < value)[0]
     
     return array
-    
-
-def euclidean_distance(array1, array2):
-    '''
-    This function computes the euclidean distance between 2 points
-
-    Parameters
-    ----------
-    array1 : list / np.ndarray
-        First array.
-    array2 : list / np.ndarray
-        Second array.
-
-    Returns
-    -------
-    distance : list / np.array
-        Array of the euclidean distance instant by instance.
-
-    '''
-    
-    input_list = False
-    if type(array1) is list:
-        array1 = np.array(array1)
-        input_list = True
-        
-    if type(array2) is list:
-        array2 = np.array(array2)
-        
-    if type(array1) is not np.ndarray or type(array2) is not np.ndarray:
-        raise Exception('ERROR: array(s) in input is(are) not list or np.ndarray!')
-    
-    array_diff = transpose(array1-array2, direction = 'column')
-    distance = np.linalg.norm(array_diff, axis = 1)
-    
-    if input_list:
-        distance = distance.tolist()
-    
-    return distance
 
 
 def transpose(array, direction = 'column'):
@@ -487,14 +449,6 @@ if __name__ == '__main__':
         raise Exception('ERROR: Test transpose NOT passed!')
     else:
         print('Test transpose passed!')
-    
-    # Test the euclidean_distance function
-    array_ones = np.array([np.ones(100), np.zeros(100)])
-    array_zeros = np.array([np.zeros(100), np.zeros(100)])
-    if (euclidean_distance(array_ones,array_zeros) - np.ones(100) > 0.1).any():
-        raise Exception('ERROR: Test euclidean_distance NOT passed!')
-    else:
-        print('Test euclidean_distance passed!')
     
     print('All implemented tests passed!')
     

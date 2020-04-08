@@ -18,8 +18,9 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 # Filt library
 from filters import butter_lowpass_filtfilt
-# Import data processing
-from td_utils import is_field, td_subfield
+# Import data processing libs
+from td_utils import is_field, td_subfield, combine_dicts
+from processing import interpolate1D
 # Import utils
 from utils import flatten_list, find_substring_indexes, copy_dict, find_values
 # Save path
@@ -817,6 +818,205 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
     savemat(save_name + '_gait_events.mat', gait_events, appendmat=True)
 
 # =============================================================================
+# Collect data around initiation events
+# =============================================================================
+def get_initiation(td, fields, events, fs, **kwargs):
+    '''
+    This function extracts the signals around certain events.
+    
+    Parameters
+    ----------
+    td : dict
+        Trial data dictionary containing the data.
+        
+    fields : str / list of str, len (n_fields)
+        Fields in td with the signals to extract around the events.
+        If str, it can either be one key in td or the path in td where to find
+        the fs in td (e.g. params/data/data).
+        
+    events : str / np.ndarray, shape (n_events,) 
+        Initiation events. If str, it takes the events from a field in td.
+        events are considered to be in samples, otherwise change the events_kind
+        parameter.
+        
+    fs : str / int
+        Sampling frequency. If str, it can either be one key in td or the path 
+        in td where to find the fs in td (e.g. params/data/data).
+        
+    pre_events : str / float / np.ndarray, shape (n_events,), optional
+        Before the event. If str, it takes the events from a field in td.
+        If float, it is a constant value. The default is 1 second. 
+        
+    post_events : str / float / np.ndarray, shape (n_events,), optional
+        After the event. If str, it takes the events from a field in td.
+        If float, it is a constant value. The default is 1 second. 
+        
+    events_kind : str, optional
+        Specify whether events are in "time" or "samples". Default is "samples".
+        The default is "samples".
+        
+    Return
+    ----------
+    td_init_norm : dict
+        Trial data dictionary containing the data in fields around the events
+        normalised to their average length.
+        
+    td_init : dict
+        Trial data dictionary containing the data in fields around the events
+        NOT normalised.
+
+    '''
+    # Input variables
+    pre_events = 1
+    post_events = 1
+    events_kind = 'samples'
+    
+    # Check input variables
+    for key,value in kwargs.items():
+        if key == 'pre_events':
+            pre_events = value
+        elif key == 'post_events':
+            post_events = value
+        elif key == 'events_kind':
+            events_kind = value
+
+    # ========================================================================
+    # Check input variables
+    
+    # Check td
+    if type(td) is not dict:
+        raise Exception('ERROR: td must be a dictionary!')
+    
+    # Check fields
+    if type(fields) is str:
+        if '/' in fields:
+            fields = td_subfield(td,fields)['signals']
+        else:
+            fields = [fields]
+    
+    if type(fields) is not list:
+        raise Exception('ERROR: fields must be a list of strings!')
+        
+    if not is_field(td, fields, True):
+        raise Exception('ERROR: missing fields in td list!')  
+    
+    # Get lenght of the signals
+    signals_len = [len(td[field]) for field in fields]
+    if (np.diff(signals_len) > 0.1).any():
+        raise Exception('ERROR: signals have different length! Not possible...')
+    else:
+        signals_len = signals_len[0]
+    
+    # Check fs
+    if type(fs) is str:
+        if '/' in fs:
+            fs = td_subfield(td,fs)['fs']
+        else:
+            if is_field(td,fs):
+                fs = td[fs]
+            else:
+                raise Exception('ERROR: input field "{}" missing from td.'.format(fs))
+    elif type(fs) is int or type(fs) is float:
+        pass
+    else:
+        raise Exception('ERROR: fs is not a string/int/float. You inputed a "{}".'.format(type(fs)))
+    
+    if events_kind not in ['time', 'samples']:
+        raise Exception('ERROR: events_kind can only be "time" or "samples". You inputed a "{}".'.format(events_kind))
+    
+    # Check events
+    if type(events) is str:
+        events = np.sort(np.array(td[events]))
+    elif type(events) is np.ndarray:
+        pass
+    else:
+        raise Exception('ERROR: events is not a string/np.ndarray. You inputed a "{}".'.format(type(events)))
+        
+    if events_kind == 'time':
+        events = np.sort(np.round(events*fs)).astype('int')
+        
+    # Check pre_events
+    if type(pre_events) is str:
+        pre_events = np.sort(np.array(td[pre_events]))
+        if events_kind == 'time':
+            pre_events = np.round(pre_events*fs).astype('int')
+    elif type(pre_events) is int or type(pre_events) is float:
+        pre_events = (events - np.round(pre_events*fs)).astype('int')
+    elif type(pre_events) is np.ndarray:
+        if events_kind == 'time':
+            pre_events = np.sort(np.round(pre_events*fs)).astype('int')
+    else:
+        raise Exception('ERROR: pre_events is not a string/np.ndarray. You inputed a "{}".'.format(type(pre_events)))
+    
+    if len(pre_events) != len(events):
+        raise Exception('ERROR: pre_events length "{}" != events length "{}".'.format(len(pre_events), len(events)))
+        
+    # Check post_events
+    if type(post_events) is str:
+        post_events = np.sort(np.array(td[post_events]))
+        if events_kind == 'time':
+            post_events = np.round(post_events*fs).astype('int')
+    elif type(post_events) is int or type(post_events) is float:
+        post_events = (events + np.round(post_events*fs)).astype('int')
+    elif type(post_events) is np.ndarray:
+        if events_kind == 'time':
+            post_events = np.sort(np.round(post_events*fs).astype('int'))
+    else:
+        raise Exception('ERROR: post_events is not a string/np.ndarray. You inputed a "{}".'.format(type(post_events)))
+    
+    if len(post_events) != len(events):
+        raise Exception('ERROR: post_events length "{}" != events length "{}".'.format(len(post_events), len(events)))
+    
+    # ========================================================================
+    # Get intervals of interest
+    
+    intervals_pre = [np.arange(pre_event,event+1)  for pre_event, event  in zip(pre_events, events) ]
+    intervals     = [np.arange(event,post_event+1) for event, post_event in zip(events, post_events)]
+    
+    intervals_pre_mean = np.array([len(interval) for interval in intervals_pre]).mean().round().astype('int')
+    intervals_mean     = np.array([len(interval) for interval in intervals]).mean().round().astype('int')
+    
+    # ========================================================================
+    # Extract the data for each interval
+    td_init_pre = dict()
+    td_init     = dict()
+    
+    # Collect kinematic data
+    for field in fields:
+        # Before event
+        td_init_pre[field + '_pre'] = []
+        for interval in intervals_pre:
+            td_init_pre[field + '_pre'].append(td[field][interval])
+        
+        # After event
+        td_init[field] = []
+        for interval in intervals:
+            td_init[field].append(td[field][interval])
+    
+    # ========================================================================
+    # Normalise data
+    td_init_pre_norm = dict()
+    td_init_norm     = dict()
+    
+    for field in td_init_pre.keys():
+        td_init_pre_norm[field] = []
+        for signal in td_init_pre[field]:
+            td_init_pre_norm[field].append(interpolate1D(signal, intervals_pre_mean, kind = 'cubic'))
+    
+    for field in td_init.keys():
+        td_init_norm[field] = []
+        for signal in td_init[field]:
+            td_init_norm[field].append(interpolate1D(signal, intervals_mean, kind = 'cubic'))
+    
+    # ========================================================================
+    # Combine data and return
+    
+    combine_dicts(td_init, td_init_pre, inplace = True)
+    combine_dicts(td_init_norm, td_init_pre_norm, inplace = True)
+    
+    return td_init_norm, td_init
+
+# =============================================================================
 # Stick plot video
 # =============================================================================
 def stick_plot_video(td, kinematics, **kwargs):
@@ -1256,7 +1456,10 @@ def gait_events_plot(td, events):
                     ax.axvline(x = ev, ymin = 0, ymax = 1, color = col + [0.5], linestyle = line_style)
         # Add legend
         ax.legend(events_line,events)
-#%% Main
+
+
+
+# Main
 if __name__ == '__main__':
 # =============================================================================
 # Stic plot video example

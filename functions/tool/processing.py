@@ -9,6 +9,7 @@ Created on Tue Feb 18 15:07:29 2020
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy import interpolate
+from utils import find_first
 
 def get_epochs(binary_array, Fs, verbose = False):
     
@@ -217,9 +218,7 @@ def convert_points_to_target_vector(points, vector):
     vector_target : np.array
         vector with pointes remapped.
 
-    '''
-    from utils import find_first
-    
+    '''    
     if type(points) is np.ndarray:
         points = [points]
     
@@ -237,18 +236,64 @@ def convert_points_to_target_vector(points, vector):
     return vector_target
     
 
+def convert_time_samples(points, fs, convert_to = 'time'):
+    '''
+    This function converts an array of points from time-based to sample-based
+    and viceversa.
+    
+    Parameters
+    ----------
+    points : list / np.ndarray, shape (n_points,)
+        Points to be converted.
+        
+    fs : int / float
+        Sampling frequency.
+        
+    convert_to : str, optional
+        Set to what unit points must be converted: "samples", "time".
+        The default is 'time'.
+
+    Returns
+    -------
+    points : list / np.ndarray
+        Converted points.
+
+    '''
+    
+    if type(points) is not list and type(points) is not np.ndarray:
+        raise Exception('ERROR: points input must be either a list or a np.array! It is a "{}"'.format(type(points)))
+    
+    if type(points) is np.ndarray:
+        points = points.astype('float')
+    
+    if type(fs) is not int and type(fs) is not float:
+        raise Exception('ERROR: fs input must be either a int or a float! It is a "{}"'.format(type(fs)))
+    
+    if convert_to not in ['time', 'samples']:
+        raise Exception('ERROR: convert_to input must be either "time" or "samples". It is "{}"!'.format(convert_to))
+    
+    for iPt, point in enumerate(points):
+        if convert_to == 'time':
+            points[iPt] = point/fs
+        else:
+            points[iPt] = point*fs
+    
+    return points
+
 def interpolate1D(array, length_new, kind = 'linear'):
     '''
     This function interpolates the given array to set a different lenght
 
     Parameters
     ----------
-    array : numpy.ndarray
+    array : numpy.ndarray, shape (n_array,)
         Array to interpolate.
+        
     length_new : int/float
         New lenght of the array.
-    kind : str
-        Kind of interpolation to apply to the data
+        
+    kind : str, optional
+        Kind of interpolation to apply to the data.
 
     Returns
     -------

@@ -19,11 +19,11 @@ from td_utils import remove_fields, remove_all_fields_but, add_params
 from utils import group_fields, convert_list_to_array, copy_dict, flatten_list, find_values, find_first
 
 # Processing libs
-from processing import artefacts_removal, convert_points_to_target_vector, get_epochs
+from processing import artefacts_removal, convert_points_to_target_vector, get_epochs, convert_time_samples
 
 from power_estimation import moving_pmtm
 
-from filters import sgolay_filter, downsample_signal, moving_average
+from filters import sgolay_filter, downsample_signal, moving_average, envelope
 from filters import butter_bandpass_filtfilt as bpff
 from filters import butter_lowpass_filtfilt as lpff
 from filters import butter_highpass_filtfilt as hpff
@@ -224,7 +224,7 @@ def identify_artefacts(_td, **kwargs):
     
     return td_artefacts
 
-def convert_fields_to_numeric_array(_td, fields, vector_target_field, inplace = True):
+def convert_fields_to_numeric_array(_td, fields, vector_target_field, kind = 'time', inplace = True):
     '''
     This function converts the points in a vector to a target vector.
     [1,4,6] --> [0 1 0 0 1 0 1]
@@ -235,10 +235,15 @@ def convert_fields_to_numeric_array(_td, fields, vector_target_field, inplace = 
         Trial data.
         
     fields : str / list of str, , len (n_fields)
-        Fields in td from which collect the data to convert.
+        Fields in td from which collect the data to convert. If Kind == 'time'
+        the data are expected in a time format, otherwise in a sample format.
         
     vector_target_field : str
-        Field with the name of the array in td to compare to fields vectors
+        Time array in td to compare to fields vectors.
+        
+    kind : str, optional
+        Set whether data are in 'time' or 'samples' format. The default is 'time'.
+        If 'samples', the Time array is converted using np.arange.
         
     inplace : bool, optional
         Perform operation on the input data dict. The default is True.
@@ -278,8 +283,14 @@ def convert_fields_to_numeric_array(_td, fields, vector_target_field, inplace = 
     if not is_field(td,fields):
         raise Exception('ERROR: Selected fields are not in the dict')
     
+    if kind not in ['time','samples']:
+        raise Exception('ERROR: kind can be either "time" or "samples". It is "{}"'.format(kind))
+    
     for td_tmp in td:
-        vector_compare = np.array(td_tmp[vector_target_field])
+        if kind == 'time':
+            vector_compare = np.array(td_tmp[vector_target_field])
+        else:
+            vector_compare = np.arange(len(td_tmp[vector_target_field]))
         for field in fields:
             points = np.array(td_tmp[field])
             td_tmp[field] = convert_points_to_target_vector(points, vector_compare)
@@ -420,23 +431,24 @@ def downsample(_td, **kwargs):
     if not is_field(td,field_time):
         raise Exception('ERROR: field_time is not in td!')
 
-    if adjust_target and field_time != None:
-        if type(adjust_target_field) is str:
-            if '/' in adjust_target_field:
-                target_fields = []
-                target_subfields = td_subfield(td[0],adjust_target_field)
-                for event, value in target_subfields.items():
-                    target_fields.append(value['signals'])
-            else:
-                target_fields = [adjust_target_field]
-            target_fields = flatten_list(target_fields)
-        if type(target_fields) is not list:
-            raise Exception('ERROR: fields must be a list of strings!')
-            
-        if not is_field(td,target_fields):
-            raise Exception('ERROR: target_fields is not in td!')
-    else:
-        raise Exception('ERROR: "adjust_target" works only if "field_time" is not None!')
+    if adjust_target:
+        if field_time != None:
+            if type(adjust_target_field) is str:
+                if '/' in adjust_target_field:
+                    target_fields = []
+                    target_subfields = td_subfield(td[0],adjust_target_field)
+                    for event, value in target_subfields.items():
+                        target_fields.append(value['signals'])
+                else:
+                    target_fields = [adjust_target_field]
+                target_fields = flatten_list(target_fields)
+            if type(target_fields) is not list:
+                raise Exception('ERROR: fields must be a list of strings!')
+                
+            if not is_field(td,target_fields):
+                raise Exception('ERROR: target_fields is not in td!')
+        else:
+            raise Exception('ERROR: "adjust_target" works only if "field_time" is not None!')
 
     # Downsample signals
     for iTd, td_tmp in enumerate(td):
@@ -541,6 +553,7 @@ def compute_multitaper(_td, **kwargs):
     fs_string = ''
     window_size_sec = 0.25 # in seconds
     window_step_sec = 0.01 # in seconds
+    norm = None
     NW = 4
     freq_min = 10
     freq_max = 100
@@ -562,6 +575,8 @@ def compute_multitaper(_td, **kwargs):
             freq_max = value
         elif key == 'unity':
             unity = value
+        elif key == 'norm':
+            norm = value
         elif key == 'nw':
             NW = value
         elif key == 'fs':
@@ -640,12 +655,16 @@ def compute_multitaper(_td, **kwargs):
     
     # Loop over the data trials
     for iTd, td_tmp in enumerate(td):
+        if verbose:
+            print('\nProcessing signals in td {}/{}'.format(iTd+1, len(td)))
+        
+        # Collect data
+        data_fields = [td_tmp[field] for field in fields]
+        data = convert_list_to_array(data_fields, axis = 1)
         # Compute pmtm
+        mt_spectrogram, sfreqs, stimes = moving_pmtm(data, window_size_smp, window_step_smp, freq_range, norm = norm, NW = NW, Fs = fs, unit = unity, verbose=verbose)
         for iFld, field in enumerate(fields):
-            if verbose:
-                print('\nProcessing signal {}/{} in td {}/{}'.format(iFld+1, len(fields), iTd+1, len(td)))
-            td_tmp[field], sfreqs, stimes = moving_pmtm(td_tmp[field], window_size_smp, window_step_smp, freq_range, NW = NW, Fs = fs, unit = unity, verbose=verbose)
-                                            
+            td_tmp[field] = mt_spectrogram[:,:,iFld]
         # Update frequency info
         if fs_string == '': # Not using params
             td_tmp['freq'] = sfreqs
@@ -693,7 +712,7 @@ def compute_filter(_td, **kwargs):
         
     kind : str
         Type of filter to apply to the data. Possible options are: 
-        'bandpass', 'lowpass', 'highpass', 'sgolay'.
+        'bandpass', 'lowpass', 'highpass', 'sgolay', 'envelope'.
          
     order : int , optional
         Order of the filter. The default value is 5.
@@ -774,7 +793,7 @@ def compute_filter(_td, **kwargs):
         else:
             print('WARNING: key "{}" not recognised by the compute_multitaper function...'.format(key))
     
-    if kind not in ['bandpass','lowpass','highpass','sgolay']:
+    if kind not in ['bandpass','lowpass','highpass','sgolay','envelope']:
         raise Exception('ERROR: kind specified "{}" is not implemented!'.format(kind))
     
     if inplace:
@@ -852,6 +871,14 @@ def compute_filter(_td, **kwargs):
                     signal_name = field
                 
                 td_tmp[signal_name] = sgolay_filter(data = td_tmp[field], win_len = win_len, order=order)
+            
+            elif kind == 'envelope':
+                if not override_fields:
+                    signal_name = field + '_env_{}_{}'.format(f_low,f_high)
+                else:
+                    signal_name = field
+                
+                td_tmp[signal_name] = envelope(data = td_tmp[field], Fs = fs, lowcut = f_low, highcut = f_high, method = 'squared', order = order)
             
             else:
                 raise Exception('ERROR: wrong kind of filter applied! Kind given is : {}'.format(kind))
@@ -1291,8 +1318,13 @@ def load_pipeline(**kwargs):
     if target_load_dict != None:
         td_target = load_data_from_folder(folders = target_load_dict['path'],**target_load_dict)
         td_target = extract_dicts(td_target, set(td_target[0].keys()), keep_name = True, all_layers = True)
+        
         if 'fields' in target_load_dict.keys():
             remove_all_fields_but(td_target,target_load_dict['fields'],False,True)
+            if 'convert_to' in target_load_dict.keys() and 'fs' in target_load_dict.keys():
+                for td_tmp in td_target:
+                    for field in target_load_dict['fields']:
+                        td_tmp[field] = convert_time_samples(td_tmp[field], fs = target_load_dict['fs'], convert_to = target_load_dict['convert_to'])
     
         # Combine target data with the predictor data
         combine_dicts(td, td_target, inplace = True)
@@ -1397,7 +1429,7 @@ def preprocess_pipeline(td, **kwargs):
     # Check input variables
     for key,value in kwargs.items():
         key = key.lower()
-        if key == 'filter':
+        if 'filter' in key:
             operations.append((key,value))
         elif key == 'multitaper':
             operations.append((key,value))
@@ -1407,7 +1439,7 @@ def preprocess_pipeline(td, **kwargs):
             print('WARNING: key "{}" not recognised by the preprocess pipeline...'.format(key))
     
     for operation in operations:
-        if operation[0] == 'filter':
+        if  'filter' in operation[0]:
             td = compute_filter(td, **operation[1])
         elif operation[0] == 'multitaper':
             td = compute_multitaper(td, **operation[1])
