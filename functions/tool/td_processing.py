@@ -480,7 +480,7 @@ def downsample(_td, **kwargs):
             
             # Update frequency info in params
             if fields_string != '':
-                subfields = td_subfield(td[0],fields_string)
+                subfields = td_subfield(td_tmp,fields_string)
                 subfields['fs'] = fs_new
             
     if input_dict:

@@ -970,8 +970,8 @@ def get_initiation(td, fields, events, fs, **kwargs):
     # ========================================================================
     # Get intervals of interest
     
-    intervals_pre = [np.arange(pre_event,event+1)  for pre_event, event  in zip(pre_events, events) ]
-    intervals     = [np.arange(event,post_event+1) for event, post_event in zip(events, post_events)]
+    intervals_pre = [np.arange(pre_event,event)  for pre_event, event  in zip(pre_events, events) ]
+    intervals     = [np.arange(event+1,post_event) for event, post_event in zip(events, post_events)]
     
     intervals_pre_mean = np.array([len(interval) for interval in intervals_pre]).mean().round().astype('int')
     intervals_mean     = np.array([len(interval) for interval in intervals]).mean().round().astype('int')
