@@ -25,6 +25,7 @@ from processing import interpolate1D
 from utils import flatten_list, find_substring_indexes, copy_dict, find_values
 # Save path
 from scipy.io import savemat
+import pickle
 
 # =============================================================================
 # Mark events
@@ -826,22 +827,25 @@ def get_initiation(td, fields, events, fs, **kwargs):
     
     Parameters
     ----------
-    td : dict
+    td : dict / list of dict, len (n_td)
         Trial data dictionary containing the data.
         
     fields : str / list of str, len (n_fields)
         Fields in td with the signals to extract around the events.
         If str, it can either be one key in td or the path in td where to find
-        the fs in td (e.g. params/data/data).
+        the fs in td (e.g. params/data/data). In case of multiple td, the fields
+        input must be shared among the td.
         
     events : str / np.ndarray, shape (n_events,) 
         Initiation events. If str, it takes the events from a field in td.
         events are considered to be in samples, otherwise change the events_kind
-        parameter.
+        parameter. In case of multiple td, the events input must be shared among
+        the td.
         
     fs : str / int
         Sampling frequency. If str, it can either be one key in td or the path 
         in td where to find the fs in td (e.g. params/data/data).
+         In case of multiple td, the fs input must be shared among the td.
         
     pre_events : str / float / np.ndarray, shape (n_events,), optional
         Before the event. If str, it takes the events from a field in td.
@@ -857,11 +861,11 @@ def get_initiation(td, fields, events, fs, **kwargs):
         
     Return
     ----------
-    td_init_norm : dict
+    td_init_norm : dict / list of dict, len (n_td)
         Trial data dictionary containing the data in fields around the events
         normalised to their average length.
         
-    td_init : dict
+    td_init : dict / list of dict, len (n_td)
         Trial data dictionary containing the data in fields around the events
         NOT normalised.
 
@@ -884,13 +888,15 @@ def get_initiation(td, fields, events, fs, **kwargs):
     # Check input variables
     
     # Check td
-    if type(td) is not dict:
-        raise Exception('ERROR: td must be a dictionary!')
+    input_dict = False
+    if type(td) == dict:
+        input_dict = True
+        td = [td]
     
     # Check fields
     if type(fields) is str:
         if '/' in fields:
-            fields = td_subfield(td,fields)['signals']
+            fields = td_subfield(td[0],fields)['signals']
         else:
             fields = [fields]
     
@@ -900,20 +906,13 @@ def get_initiation(td, fields, events, fs, **kwargs):
     if not is_field(td, fields, True):
         raise Exception('ERROR: missing fields in td list!')  
     
-    # Get lenght of the signals
-    signals_len = [len(td[field]) for field in fields]
-    if (np.diff(signals_len) > 0.1).any():
-        raise Exception('ERROR: signals have different length! Not possible...')
-    else:
-        signals_len = signals_len[0]
-    
     # Check fs
     if type(fs) is str:
         if '/' in fs:
-            fs = td_subfield(td,fs)['fs']
+            fs = td_subfield(td[0],fs)['fs']
         else:
-            if is_field(td,fs):
-                fs = td[fs]
+            if is_field(td[0],fs):
+                fs = td[0][fs]
             else:
                 raise Exception('ERROR: input field "{}" missing from td.'.format(fs))
     elif type(fs) is int or type(fs) is float:
@@ -925,94 +924,124 @@ def get_initiation(td, fields, events, fs, **kwargs):
         raise Exception('ERROR: events_kind can only be "time" or "samples". You inputed a "{}".'.format(events_kind))
     
     # Check events
-    if type(events) is str:
-        events = np.sort(np.array(td[events]))
-    elif type(events) is np.ndarray:
-        pass
-    else:
-        raise Exception('ERROR: events is not a string/np.ndarray. You inputed a "{}".'.format(type(events)))
+    events_list = []
+    pre_events_list = []
+    post_events_list = []
+    for td_tmp in td:
+        if type(events) is str:
+            events_tmp = np.sort(np.array(td_tmp[events]))
+        elif type(events) is np.ndarray:
+            pass
+        else:
+            raise Exception('ERROR: events is not a string/np.ndarray. You inputed a "{}".'.format(type(events)))
+            
+        if events_kind == 'time':
+            events_tmp = np.sort(np.round(events_tmp*fs)).astype('int')
+        # Store events_tmp in events_list
+        events_list.append(events_tmp)
         
-    if events_kind == 'time':
-        events = np.sort(np.round(events*fs)).astype('int')
+        # Check pre_events
+        if type(pre_events) is str:
+            pre_events_tmp = np.sort(np.array(td_tmp[pre_events]))
+            if events_kind == 'time':
+                pre_events_tmp = np.round(pre_events_tmp*fs).astype('int')
+        elif type(pre_events) is int or type(pre_events) is float:
+            pre_events_tmp = (events_tmp - np.round(pre_events*fs)).astype('int')
+        elif type(pre_events) is np.ndarray:
+            if events_kind == 'time':
+                pre_events_tmp = np.sort(np.round(pre_events*fs)).astype('int')
+        else:
+            raise Exception('ERROR: pre_events is not a string/np.ndarray. You inputed a "{}".'.format(type(pre_events)))
         
-    # Check pre_events
-    if type(pre_events) is str:
-        pre_events = np.sort(np.array(td[pre_events]))
-        if events_kind == 'time':
-            pre_events = np.round(pre_events*fs).astype('int')
-    elif type(pre_events) is int or type(pre_events) is float:
-        pre_events = (events - np.round(pre_events*fs)).astype('int')
-    elif type(pre_events) is np.ndarray:
-        if events_kind == 'time':
-            pre_events = np.sort(np.round(pre_events*fs)).astype('int')
-    else:
-        raise Exception('ERROR: pre_events is not a string/np.ndarray. You inputed a "{}".'.format(type(pre_events)))
-    
-    if len(pre_events) != len(events):
-        raise Exception('ERROR: pre_events length "{}" != events length "{}".'.format(len(pre_events), len(events)))
+        if len(pre_events_tmp) != len(events_tmp):
+            raise Exception('ERROR: pre_events length "{}" != events length "{}".'.format(len(pre_events_tmp), len(events_tmp)))
+        # Store events_tmp in events_list
+        pre_events_list.append(pre_events_tmp)
         
-    # Check post_events
-    if type(post_events) is str:
-        post_events = np.sort(np.array(td[post_events]))
-        if events_kind == 'time':
-            post_events = np.round(post_events*fs).astype('int')
-    elif type(post_events) is int or type(post_events) is float:
-        post_events = (events + np.round(post_events*fs)).astype('int')
-    elif type(post_events) is np.ndarray:
-        if events_kind == 'time':
-            post_events = np.sort(np.round(post_events*fs).astype('int'))
-    else:
-        raise Exception('ERROR: post_events is not a string/np.ndarray. You inputed a "{}".'.format(type(post_events)))
-    
-    if len(post_events) != len(events):
-        raise Exception('ERROR: post_events length "{}" != events length "{}".'.format(len(post_events), len(events)))
+        # Check post_events
+        if type(post_events) is str:
+            post_events_tmp = np.sort(np.array(td_tmp[post_events]))
+            if events_kind == 'time':
+                post_events_tmp = np.round(post_events_tmp*fs).astype('int')
+        elif type(post_events) is int or type(post_events) is float:
+            post_events_tmp = (events_tmp + np.round(post_events*fs)).astype('int')
+        elif type(post_events) is np.ndarray:
+            if events_kind == 'time':
+                post_events_tmp = np.sort(np.round(post_events*fs).astype('int'))
+        else:
+            raise Exception('ERROR: post_events is not a string/np.ndarray. You inputed a "{}".'.format(type(post_events)))
+        
+        if len(post_events_tmp) != len(events_tmp):
+            raise Exception('ERROR: post_events length "{}" != events length "{}".'.format(len(post_events_tmp), len(events_tmp)))
+        # Store events_tmp in events_list
+        post_events_list.append(post_events_tmp)
     
     # ========================================================================
     # Get intervals of interest
     
-    intervals_pre = [np.arange(pre_event,event)  for pre_event, event  in zip(pre_events, events) ]
-    intervals     = [np.arange(event+1,post_event) for event, post_event in zip(events, post_events)]
+    intervals_pre_list = []
+    intervals_list = []
+    for pre_events, events, post_events in zip(pre_events_list, events_list, post_events_list):
+        intervals_pre_list.append([np.arange(pre_event,event)  for pre_event, event  in zip(pre_events, events)])
+        intervals_list.append([np.arange(event+1,post_event) for event, post_event in zip(events, post_events)])
     
-    intervals_pre_mean = np.array([len(interval) for interval in intervals_pre]).mean().round().astype('int')
-    intervals_mean     = np.array([len(interval) for interval in intervals]).mean().round().astype('int')
+    intervals_pre_mean = np.array([len(interval) for intervals_pre in intervals_pre_list for interval in intervals_pre]).mean().round().astype('int')
+    intervals_mean     = np.array([len(interval) for intervals in intervals_list for interval in intervals]).mean().round().astype('int')
     
     # ========================================================================
     # Extract the data for each interval
-    td_init_pre = dict()
-    td_init     = dict()
+    td_init_pre = []
+    td_init     = []
     
-    # Collect kinematic data
-    for field in fields:
-        # Before event
-        td_init_pre[field + '_pre'] = []
-        for interval in intervals_pre:
-            td_init_pre[field + '_pre'].append(td[field][interval])
+    # Collect data in intervals
+    for td_tmp, intervals_pre, intervals  in zip(td, intervals_pre_list, intervals_list):
+        td_init_pre_tmp = dict()
+        td_init_tmp     = dict()
+        for field in fields:
+            # Before event
+            td_init_pre_tmp[field + '_pre'] = []
+            for interval in intervals_pre:
+                td_init_pre_tmp[field + '_pre'].append(td_tmp[field][interval])
+            # After event
+            td_init_tmp[field] = []
+            for interval in intervals:
+                td_init_tmp[field].append(td_tmp[field][interval])
         
-        # After event
-        td_init[field] = []
-        for interval in intervals:
-            td_init[field].append(td[field][interval])
+        td_init_pre.append(td_init_pre_tmp)
+        td_init.append(td_init_tmp)
     
     # ========================================================================
     # Normalise data
-    td_init_pre_norm = dict()
-    td_init_norm     = dict()
+    td_init_pre_norm = []
+    td_init_norm     = []
     
-    for field in td_init_pre.keys():
-        td_init_pre_norm[field] = []
-        for signal in td_init_pre[field]:
-            td_init_pre_norm[field].append(interpolate1D(signal, intervals_pre_mean, kind = 'cubic'))
+    # Normalise data in intervals
+    for td_init_pre_tmp, td_init_tmp  in zip(td_init_pre, td_init):
+        td_init_pre_norm_tmp = dict()
+        td_init_norm_tmp     = dict()
+        # Before event
+        for field in td_init_pre_tmp.keys():
+            td_init_pre_norm_tmp[field] = []
+            for signal in td_init_pre_tmp[field]:
+                td_init_pre_norm_tmp[field].append(interpolate1D(signal, intervals_pre_mean, kind = 'cubic'))
+        # After event
+        for field in td_init_tmp.keys():
+            td_init_norm_tmp[field] = []
+            for signal in td_init_tmp[field]:
+                td_init_norm_tmp[field].append(interpolate1D(signal, intervals_mean, kind = 'cubic'))
     
-    for field in td_init.keys():
-        td_init_norm[field] = []
-        for signal in td_init[field]:
-            td_init_norm[field].append(interpolate1D(signal, intervals_mean, kind = 'cubic'))
-    
+        td_init_pre_norm.append(td_init_pre_norm_tmp)
+        td_init_norm.append(td_init_norm_tmp)
+        
     # ========================================================================
     # Combine data and return
     
-    combine_dicts(td_init, td_init_pre, inplace = True)
-    combine_dicts(td_init_norm, td_init_pre_norm, inplace = True)
+    combine_dicts((td_init, td_init_pre), inplace = True)
+    combine_dicts((td_init_norm, td_init_pre_norm), inplace = True)
+    
+    if input_dict:
+        td_init_norm = td_init_norm[0]
+        td_init = td_init[0]
     
     return td_init_norm, td_init
 
@@ -1251,6 +1280,10 @@ def stick_plot_at_events(td, kinematics, events, **kwargs):
     events_plus_step : int/float, optional
         Step in plotting the events_plus. The default is 5.
         
+    save_name : str, optional
+        Set the name of the file where to save the gait events. The default is
+        a file index.
+        
     verbose : str, optional
         Narrate the several operations in this method. The default is False.
     
@@ -1269,6 +1302,8 @@ def stick_plot_at_events(td, kinematics, events, **kwargs):
     coordinates = ['x','y','z']
     events_plus = 50
     events_plus_step = 5
+    save_figure = False
+    save_name = ''
     verbose = False
     
     # Check input variables
@@ -1279,6 +1314,9 @@ def stick_plot_at_events(td, kinematics, events, **kwargs):
             events_plus = value
         elif key == 'events_plus_step':
             events_plus_step = value
+        elif key == 'save_name':
+            save_figure = True
+            save_name = value
         elif key == 'verbose':
             verbose = value
         else:
@@ -1307,6 +1345,9 @@ def stick_plot_at_events(td, kinematics, events, **kwargs):
     elif type(events) is np.ndarray:
         events = events.tolist()
     
+    if type(save_name) is not str:
+        raise Exception('ERROR: save_name must be a string. You inputed a {}'.format(type(save_name)))
+        
     # ========================================================================
     # Collect points in the space
     
@@ -1394,7 +1435,15 @@ def stick_plot_at_events(td, kinematics, events, **kwargs):
                     ax.plot(kin_var[body_part][coordinates[0]][idx,:],kin_var[body_part][coordinates[1]][idx,:], Color = body_part_color[body_part])
                     ax.set_xlim(xyz_lim[coordinates[0]])
                     ax.set_ylim(xyz_lim[coordinates[1]])
-
+        
+        ax.set_aspect('equal', adjustable='datalim') 
+        
+        if save_figure:
+            pickle.dump(fig, open(save_name + '_kin_plot_event_' + str(event) + '.pickle', 'wb'))
+            fig.savefig(save_name + '_kin_plot_event_' + str(event) + '.svg', bbox_inches='tight')
+            mng = plt.get_current_fig_manager()
+            mng.window.showMaximized()
+            fig.savefig(save_name + '_kin_plot_event_' + str(event) + '.pdf', bbox_inches='tight')
 
 # =============================================================================
 # Plot events

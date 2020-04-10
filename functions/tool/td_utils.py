@@ -51,6 +51,7 @@ from enum import Enum
 # Import utilities
 from utils import bipolar, add, flatten_list, transpose, copy_dict, find_values
 
+import pickle
 import copy
 
 # Plotting events characteristics
@@ -505,14 +506,18 @@ def combine_fields(_td, _fields, **kwargs):
     ----------
     _td : dict / list of dict
         Trial data.
-    _fields : list of str
+        
+    _fields : list of str, len (2)
         Two fields to combine.
-    method : str
+        
+    method : str, optional
         Method for combining the arrays. The default is subtract.
+        
     remove_fields : bool, optional
         Remove the fields before returning the dataset. The default is True.
+        
     inplace : bool, optional
-        Perform operation on the input data dict. The default is False.
+        Perform operation on the input data dict. The default is True.
 
     Returns
     -------
@@ -607,17 +612,15 @@ def combine_fields(_td, _fields, **kwargs):
         return td
   
     
-def combine_dicts(_td, _td2copy, inplace = True):
+def combine_dicts(td_tuple, inplace = True):
     """        
-    This function combine 2 dicts.
-    In case of same fields, the first dict dominates
+    This function combines N dicts. In case the dictionaries share some fields,
+    the first dict dominates.
     
     Parameters
     ----------
-    _td : dict/list of dict
-        dict of the trial data
-    _td2copy : dict/list of dict
-        dict of the trial data
+    td_tuple : tuple of dict / tuple of list of dict
+        Dictionaries to combine
     inplace : string, optional
         Perform operation on the input data dict. The default is False.
 
@@ -627,29 +630,39 @@ def combine_dicts(_td, _td2copy, inplace = True):
         trial data variable
 
     """
-    if inplace:
-        td = _td
-    else:
-        td = copy_dict(_td)
     
-    td2copy = copy_dict(_td2copy)
+    if type(td_tuple) is not tuple:
+        raise Exception('ERROR: td_tuple in not a tuple! You inputed a "{}".'.format(type(td_tuple)))
+    
+    if len(td_tuple)<2:
+        raise Exception('ERROR: td_tuple contains less than 2 dicts! It contains "{}".'.format(len(td_tuple)))
+        
+    if inplace:
+        td = td_tuple[0]
+    else:
+        td = copy_dict(td_tuple[0])
+    
+    td_list = list(td_tuple[1:])
     
     input_dict = False
     if type(td) is dict:
         input_dict = True
         td = [td]
     
-    if type(td2copy) is dict:
-        td2copy = [td2copy]
+    for iEl, el in enumerate(td_list):
+        if type(el) is dict:
+            td_list[iEl] = [el]
     
-    # check that tds have the same dimension
-    if len(td) != len(td2copy):
-        raise Exception('ERROR: The 2 tds have different dimension!')
+    # Check that tds have the same dimension
+    for el in td_list:
+        if len(td) != len(el):
+            raise Exception('ERROR: tds have different dimension!')
     
-    for td1_el, td2_el in zip(td, td2copy):
-        for k,v in td2_el.items():
-            if k not in set(td1_el.keys()):
-                td1_el[k] = v
+    for el in td_list:
+        for td1_el, td2_el in zip(td, el):
+            for k,v in td2_el.items():
+                if k not in set(td1_el.keys()):
+                    td1_el[k] = v
     
     if input_dict:
         td = td[0]
@@ -884,7 +897,7 @@ def extract_dicts(td, fields, **kwargs):
                         dict2add[field+'_'+k] = v
                 else:
                     dict2add = dict_new
-                combine_dicts(dict_tmp, dict2add, inplace = True)
+                combine_dicts((dict_tmp, dict2add), inplace = True)
             else:
                 dict_tmp[field] = td_tmp[field]
         
@@ -893,7 +906,7 @@ def extract_dicts(td, fields, **kwargs):
             for k,v in all_layers_dict.items():
                 if type(v) is dict:
                     in_layer_dict = extract_dicts(all_layers_dict, k, keep_name = keep_name, all_layers = all_layers)
-                    combine_dicts(dict_tmp, in_layer_dict, inplace = True)
+                    combine_dicts((dict_tmp, in_layer_dict), inplace = True)
                     remove_fields(dict_tmp,k,exact_field = True, inplace = True)
         
         td_out.append(dict_tmp)
@@ -974,6 +987,8 @@ def td_plot(td, y, **kwargs):
     save_figure = False
     save_format = 'pdf'
     
+    kind = 'contour'
+    
     events = None
     
     # Check input variables
@@ -1011,6 +1026,8 @@ def td_plot(td, y, **kwargs):
             x_ticks = value
         elif key == 'maximise':
             maximise = value
+        elif key == 'kind':
+            kind = value
         elif key == 'save':
             save_figure = True
             save_name = value
@@ -1035,9 +1052,15 @@ def td_plot(td, y, **kwargs):
         save_format = [save_format]
     if type(save_format) is not list:
         raise Exception('ERROR: type(save_format) is not a list!')
+    for save_form in save_format:
+        if save_form not in ['pickle','svg','png','pdf']:
+            raise Exception('ERROR: save_format can only be: "pickle","svg","png" or "pdf"! You inputed "{}".'.format(save_form))
         
     if x_ticks not in ['on','off']:
         raise Exception('ERROR: x_ticks can be either "on" or "off"!')
+        
+    if kind not in ['contour','imshow']:
+        raise Exception('ERROR: kind can be either "contour" or "imshow"! You inputed "{}".'.format(kind))
         
     ##########################################################################    
     # Create figure
@@ -1131,7 +1154,7 @@ def td_plot(td, y, **kwargs):
     # Check axis colours
     if colours == None:
         col_list = [[None] * max_signal_n] * len(y)
-    elif type(colours) == str or type(colours) == cm.colors.ListedColormap:
+    elif type(colours) == str or type(colours) == cm.colors.ListedColormap or type(colours) == cm.colors.LinearSegmentedColormap:
         col_list = [[colours] * max_signal_n] * len(y)
     elif type(colours) == list and type(colours[0]) != list:
         col_list = [colours] * len(y)
@@ -1267,15 +1290,32 @@ def td_plot(td, y, **kwargs):
                             
             elif signal_dim == 2:
                 if c == None:
-                    try:
-                        cs = ax.contourf(X, Y, td[sig])
-                    except:
-                        cs = ax.contourf(X, Y, td[sig].T)
+                    if X.shape == td[sig].shape:
+                        if kind == 'imshow':
+                            cs = ax.imshow(td[sig], extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto')
+                        else:
+                            cs = ax.contourf(X, Y, td[sig])
+                    else:
+                        if kind == 'imshow':
+                            cs = ax.imshow(np.flip(td[sig].T,0), extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto')
+                        else:
+                            cs = ax.contourf(X, Y, td[sig].T)
                 else:
-                    try:
-                        cs = ax.contourf(X, Y, td[sig], cmap=c)
-                    except:
-                        cs = ax.contourf(X, Y, td[sig].T, cmap=c)
+                    if X.shape == td[sig].shape:
+                        if kind == 'imshow':
+                            cs = ax.imshow(td[sig].T, extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto', cmap=c)
+                        else:
+                            cs = ax.contourf(X, Y, td[sig], cmap=c)
+                    else:
+                        if kind == 'imshow':
+                            cs = ax.imshow(np.flip(td[sig].T,0),  extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto', cmap=c)
+                        else:
+                            cs = ax.contourf(X, Y, td[sig].T, cmap=c)
+                        
+                # norm_cm = cm.colors.Normalize(vmin=cs.cvalues.min(), vmax=cs.cvalues.max())
+                # sm = plt.cm.ScalarMappable(norm=norm_cm, cmap = cs.cmap)
+                # sm.set_array([])
+                # fig.colorbar(sm, ax = ax, ticks=cs.levels)
                 fig.colorbar(cs, ax = ax)
         
         # Manage ticks
@@ -1306,8 +1346,10 @@ def td_plot(td, y, **kwargs):
                 
                 if len(td[event]) == len(td[signal[0]]):
                     events_2_plot = find_values(td[event], value = 0.9, method = 'bigger')
-                    if x != None:
+                    if signal_dim == 1 and x != None:
                         events_2_plot = td[x][events_2_plot]
+                    elif signal_dim == 2:
+                        events_2_plot = X[0,events_2_plot]
                 else:
                     events_2_plot = td[event]
                 
@@ -1339,8 +1381,13 @@ def td_plot(td, y, **kwargs):
     if save_figure:
         for form in save_format:
             if form == 'pickle':
-                import pickle
                 pickle.dump(fig, open(save_name +'.pickle', 'wb'))
+            elif form == 'svg':
+                fig.savefig(save_name + '.svg', bbox_inches='tight')
+            elif form == 'png':
+                mng = plt.get_current_fig_manager()
+                mng.window.showMaximized()
+                fig.savefig(save_name + '.png', bbox_inches='tight')
             elif form == 'pdf':
                 mng = plt.get_current_fig_manager()
                 mng.window.showMaximized()
@@ -1360,7 +1407,7 @@ if __name__ == '__main__':
     td_test_list = [td_test,td_test]
     
     # Test combine_dicts
-    td_comb = combine_dicts(td_test, td_test2, inplace = False)
+    td_comb = combine_dicts((td_test, td_test2), inplace = False)
     if set(['test1','test2','test3']) == td_comb.keys() and (td_comb['test1'] == td_test['test1']).all():
         print('Test combine_dicts passed!')
     else:
@@ -1395,13 +1442,13 @@ if __name__ == '__main__':
     
     # Test combine_fields
     td_test_combine = {'test1': np.arange(10), 'test2': np.arange(10)}
-    td_new = combine_fields(td_test_combine,['test1','test2'],method = 'subtract')
+    td_new = combine_fields(td_test_combine,['test1','test2'],method = 'subtract', inplace = False)
     if 'test1-test2' in td_new.keys() and (td_new['test1-test2'] - np.zeros(10) < 0.1).all():
         print('Test combine_fields passed!')
     else:
         raise Exception('ERROR: Test combine_fields NOT passed!')
         
-    del td_test, td_test2, td_test_list, td_comb, td_res, td_new, td_test_cf2n, td_new1, td_new2, td_test_combine
+    del td_test, td_test2, td_test_list, td_comb, td_res, td_new, td_new1, td_new2, td_test_combine
     print('All implemented tests passed!')
     
     

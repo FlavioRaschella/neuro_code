@@ -557,7 +557,7 @@ def compute_multitaper(_td, **kwargs):
     NW = 4
     freq_min = 10
     freq_max = 100
-    unity = 'db'
+    unit = 'db'
     adjust_target = False
     inplace = True
     verbose = False
@@ -573,8 +573,8 @@ def compute_multitaper(_td, **kwargs):
             freq_min = value
         elif key == 'freq_stop':
             freq_max = value
-        elif key == 'unity':
-            unity = value
+        elif key == 'unit':
+            unit = value
         elif key == 'norm':
             norm = value
         elif key == 'nw':
@@ -662,7 +662,7 @@ def compute_multitaper(_td, **kwargs):
         data_fields = [td_tmp[field] for field in fields]
         data = convert_list_to_array(data_fields, axis = 1)
         # Compute pmtm
-        mt_spectrogram, sfreqs, stimes = moving_pmtm(data, window_size_smp, window_step_smp, freq_range, norm = norm, NW = NW, Fs = fs, unit = unity, verbose=verbose)
+        mt_spectrogram, sfreqs, stimes = moving_pmtm(data, window_size_smp, window_step_smp, freq_range, norm = norm, NW = NW, Fs = fs, unit = unit, verbose=verbose)
         for iFld, field in enumerate(fields):
             td_tmp[field] = mt_spectrogram[:,:,iFld]
         # Update frequency info
@@ -1327,7 +1327,7 @@ def load_pipeline(**kwargs):
                         td_tmp[field] = convert_time_samples(td_tmp[field], fs = target_load_dict['fs'], convert_to = target_load_dict['convert_to'])
     
         # Combine target data with the predictor data
-        combine_dicts(td, td_target, inplace = True)
+        combine_dicts((td, td_target), inplace = True)
     
     if convert_fields_to_numeric_array_dict != None:
         td = convert_fields_to_numeric_array(td, fields = convert_fields_to_numeric_array_dict['fields'], 

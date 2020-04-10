@@ -127,7 +127,7 @@ def pmtm(data, NW = 4, Fs = None, NFFT = None):
     w = pmtm_params(Fs, NFFT)
     
     # Compute tapers
-    tapers, concentration = dpss(N, NW, Kmax=2*NW-1, return_ratios = True)
+    tapers = dpss(N, NW, Kmax=2*NW-1)
     tapers = transpose(tapers,'column')
     
     Sk = np.empty((NFFT, channels))
@@ -233,7 +233,7 @@ def moving_pmtm(data, win_size, win_step, freq_range, norm = None, NW = 4, Fs = 
     norm : np.ndarray, optional
         Normalisation values for each channel. The default is None.
         
-    NW : int, optional
+    NW : int, shape (n_freq, n_channels), optional
         Time Half-Bandwidth Product for computing the pmtm. The default is 4.
         
     Fs : int / float, optional
@@ -351,7 +351,7 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
         Samples after the event to use for the pmtm. win_step/2 will be added
         to pre_event to account for the windowing.
         
-    norm : np.ndarray, optional
+    norm : np.ndarray, shape (n_freq, n_channels), optional
         Normalisation values for each channel. The default is None.
         
     NW : int, optional
@@ -421,7 +421,7 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
     post_event = int(post_event + win_size/2)
     
     # Compute pmtm features
-    win_start = np.arange(-post_event,pre_event-win_size+1,win_step).astype('int')
+    win_start = np.arange(-pre_event,post_event-win_size+win_step,win_step).astype('int')
     df, sfreqs, stimes, freq_idx = process_spectrogram_params(win_start, win_size, freq_range, Fs)
         
     # Compute spectrogram
@@ -432,9 +432,9 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
     if type(norm) == np.ndarray:
         norm = transpose(norm,'column')
         if norm.shape[0] != len(sfreqs):
-            raise Exception('ERROR: normalisation array dimensions "{}" != from spectogram freq dimension {}!'.format(norm.shape[0],len(sfreqs)))
+            raise Exception('ERROR: normalisation array 1st dimension "{}" != from spectogram freq dimension {}!'.format(norm.shape[0],len(sfreqs)))
         if norm.ndim == 2 and norm.shape[1] != n_channels:
-            raise Exception('ERROR: normalisation array 2nd dimensions "{}" != from the number of channels {}!'.format(norm.shape[1],n_channels))
+            raise Exception('ERROR: normalisation array 2nd dimension "{}" != from the number of channels {}!'.format(norm.shape[1],n_channels))
     
     for iEv, event in enumerate(events):
         for iWin, win_idx in enumerate(win_start):
@@ -444,7 +444,11 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
             mt_spectrogram[iWin,:,iEv,:] = psd[freq_idx]
     
     if type(norm) == np.ndarray:
-        norm_mat = np.tile(np.expand_dims(norm, axis=1), (len(stimes),1,n_events,1))
+        if norm.ndim == 1:
+            norm = np.expand_dims(np.expand_dims(norm, axis=1), axis=1)
+        else:
+            norm = np.expand_dims(norm, axis=1)
+        norm_mat = np.tile(norm, (len(stimes),1,n_events,1))
         mt_spectrogram = mt_spectrogram / norm_mat
         
     # Display spectrogram info
