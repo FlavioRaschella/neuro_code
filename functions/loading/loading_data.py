@@ -489,6 +489,7 @@ def reduce_mat_array(val,kind = None):
     
 def process_mat_struct(key,val):
     val = reduce_mat_array(val, kind = 'V')
+    # print('process_mat_struct : {}'.format(type(val)))
     
     if type(val) == np.ndarray:
         tmp_dict = dict()
@@ -504,7 +505,9 @@ def process_mat_struct(key,val):
                 tmp = process_mat_dict({'el':el})
                 tmp_dict[k][idx] = tmp['el']
     else:
-        raise Exception('ERROR: new data type in structure disassembling! Update the code...')
+        tmp_dict = {key: 'what the fuck is this?? Hopefully not a table!'}
+        print('WARNING: new data type in structure disassembling! Update the code...')
+        # raise Exception('ERROR: new data type in structure disassembling! Update the code...')
 
     return tmp_dict
 
@@ -543,8 +546,8 @@ def process_mat_dict(td):
     td_out = {}
     for key, val in td.items():
         if '__' not in key:
-            # break; key = 'RFS'; val = td[key]; key = 'fileComments'; val = td[key];            
-            # print(val.dtype.char)
+            # break; key = 'RFS'; val = td[key]; key = 'fileComments'; val = td[key];  
+            # print('process_mat_dict : {}'.format(val.dtype.char))
             
             if val.dtype.char in ['U']: # String
                 td_out[key] = reduce_mat_array(val, 'U')

@@ -80,7 +80,7 @@ def pmtm_params(Fs, NFFT):
     return sfreqs
 
 
-def pmtm(data, NW = 4, Fs = None, NFFT = None):
+def pmtm(data, NW = 4, Fs = None, NFFT = None, kind = 'chronux'):
     '''
     Compute the power spectrum via Multitapering.
     If the number of tapers == 1, it is a stft (short-time fourier transform)
@@ -99,6 +99,10 @@ def pmtm(data, NW = 4, Fs = None, NFFT = None):
     NFFT : int, optional
         Length of the signal for the FFT analisys. The default value is
         max(256, 2**nextpow2(n_samples)).
+        
+    kind : str, optional
+        Type of computation. It can be "milekovic" or "chronux".
+        The default value is chronux.
 
     Returns
     -------
@@ -107,6 +111,9 @@ def pmtm(data, NW = 4, Fs = None, NFFT = None):
 
     '''
     
+    if kind not in ['milekovic','chronux']:
+        raise Exception('ERROR: kinds can only be "milekovic" or "chronux". You inputed "{}"!'.format(kind))
+        
     # Number of channels
     if data.ndim == 1:
         data = np.expand_dims(data, axis=1)
@@ -115,7 +122,7 @@ def pmtm(data, NW = 4, Fs = None, NFFT = None):
     
     # Data length
     N = data.shape[0]
-    channels = data.shape[1]
+    n_channels = data.shape[1]
     
     if Fs == None:
         Fs = 2*np.pi
@@ -127,22 +134,47 @@ def pmtm(data, NW = 4, Fs = None, NFFT = None):
     w = pmtm_params(Fs, NFFT)
     
     # Compute tapers
-    tapers = dpss(N, NW, Kmax=2*NW-1)
+    if kind in ['chronux']:
+        if NW == 1:
+            tapers = np.expand_dims(np.hamming(N),1) * np.sqrt(Fs)
+        else:
+            tapers = dpss(N, NW, Kmax=2*NW-1) * np.sqrt(Fs)
+    elif kind in ['milekovic']:
+        if NW == 1:
+            tapers = np.expand_dims(np.hamming(N)/np.linalg.norm(np.hamming(N)),1)
+        else:
+            tapers = dpss(N, NW, Kmax=2*NW-1)
     tapers = transpose(tapers,'column')
+    n_tapers = tapers.shape[1]
     
-    Sk = np.empty((NFFT, channels))
-    Sk[:] = np.NaN
+    # Add channel indices to tapers
+    tapers = np.tile(np.expand_dims(tapers,2),(1,1,n_channels))
+    # Add taper indices to data
+    data = np.tile(np.expand_dims(data,1),(1,n_tapers,1))
     
-    for channel in range(channels):
-        # Compute the FFT
-        Sk_complex = np.fft.fft(np.multiply(tapers.transpose(), data[:,channel]), NFFT)
-        # Compute the whole power spectrum [Power]
-        Sk[:,channel] = np.mean(abs(Sk_complex)**2, axis = 0)
+    data_proj = data*tapers
+    
+    if kind in ['chronux']:
+        Sk_complex = (np.fft.fft(data_proj.T, NFFT)/Fs).T
+    elif kind in ['milekovic']:
+        Sk_complex = (np.fft.fft(data_proj.T, NFFT)).T
+    
+    # Sk = np.mean(abs(Sk_complex), axis = 1)
+    
+    # Sk = np.empty((NFFT, n_channels))
+    # Sk[:] = np.NaN
+    
+    # for channel in range(n_channels):
+    #     # Compute the FFT
+    #     Sk_complex = np.fft.fft(np.multiply(tapers.transpose(), data[:,channel]), NFFT)/Fs
+    #     # Compute the whole power spectrum [Power]
+    #     # Sk[:,channel] = np.mean(abs(Sk_complex)**2, axis = 0)
+    #     Sk[:,channel] = np.mean(abs(Sk_complex), axis = 0)
 
-    return Sk_complex, Sk, w, NFFT
+    return Sk_complex, w, NFFT
 
 
-def compute_psd(Sk, w, NFFT, Fs = None, unit = 'power'):
+def compute_psd(Sk_complex, w, NFFT, Fs = None, kind = 'chronux', unit = 'power'):
     '''
     Compute the 1-sided PSD [Power/freq].
     Also, compute the corresponding freq vector & freq units.
@@ -162,6 +194,10 @@ def compute_psd(Sk, w, NFFT, Fs = None, unit = 'power'):
     Fs : int / float, optional
         Sampling Frequency. The default is 2*np.pi.
         
+    kind : str, optional
+        Type of computation. It can be "milekovic" or "chronux".
+        The default value is chronux.
+        
     unit : str, optional
         Output unit of the psd. The default is 'power'.
         
@@ -174,32 +210,36 @@ def compute_psd(Sk, w, NFFT, Fs = None, unit = 'power'):
         One-sided frequency vector.
         
     '''
-    
-    # Number of channels
-    if Sk.ndim == 1:
-        Sk = np.expand_dims(Sk, axis=1)
-    else:
-        Sk = transpose(Sk, 'column')
-    
+        
+    if kind not in ['milekovic','chronux']:
+        raise Exception('ERROR: kinds can only be "milekovic" or "chronux". You inputed "{}"!'.format(kind))
+        
     # Generate the one-sided spectrum [Power]
     if NFFT % 2 == 0:
         select = np.arange(int(NFFT/2 +1)) # EVEN
-        Sk_unscaled = Sk[select,:] # Take only [0,pi] or [0,pi)
-        Sk_unscaled[1:-1,:] = 2*Sk_unscaled[1:-1,:] # Don't double unique Nyquist point
+        Sk_unscaled = Sk_complex[select,:,:] # Take only [0,pi] or [0,pi)
+        # Sk_unscaled[1:-1,:] = 2*Sk_unscaled[1:-1,:] # Don't double unique Nyquist point
     else:
         select = np.arange(int((NFFT+1)/2)) # ODD
-        Sk_unscaled = Sk[select,:] # Take only [0,pi] or [0,pi)
-        Sk_unscaled[1:,:] = 2*Sk_unscaled[1:,:] # Only DC is a unique point and doesn't get doubled
+        Sk_unscaled = Sk_complex[select,:,:] # Take only [0,pi] or [0,pi)
+        # Sk_unscaled[1:,:] = 2*Sk_unscaled[1:,:] # Only DC is a unique point and doesn't get doubled
     
     w = w[select]
     
     # Compute the PSD [Power/freq]
     if Fs != None:
-        psd = Sk_unscaled/Fs # Scale by the sampling frequency to obtain the psd 
+        # psd = Sk_unscaled/Fs # Scale by the sampling frequency to obtain the psd 
+        # psd = Sk_unscaled/np.sqrt(Fs) # Scale by the sampling frequency to obtain the psd 
         units = 'Power/Frequency (Power Amplitude/Hz)'
     else:
-        psd = Sk_unscaled/(2*np.pi) # Scale the power spectrum by 2*pi to obtain the psd
+        Fs = 2*np.pi
+        # psd = Sk_unscaled/(2*np.pi) # Scale the power spectrum by 2*pi to obtain the psd
         units = 'rad/sample'
+    
+    if kind in ['chronux']:
+        psd = np.mean(abs(np.conj(Sk_unscaled)*Sk_unscaled), axis = 1)
+    elif kind in ['milekovic']:
+        psd = np.mean(abs(Sk_unscaled), axis = 1) / np.sqrt(Fs)
     
     if unit == 'db':
         psd = pow2db(psd)
@@ -211,7 +251,8 @@ def compute_psd(Sk, w, NFFT, Fs = None, unit = 'power'):
     return psd, w, units
 
 # Multitaper power estimation
-def moving_pmtm(data, win_size, win_step, freq_range, norm = None, NW = 4, Fs = None, NFFT=None, unit = 'db', verbose=False):
+def moving_pmtm(data, win_size, win_step, freq_range,
+                norm = None, NW = 4, Fs = None, NFFT=None, kind = 'chronux', unit = 'power', verbose=False):
     '''
     Compute the power spectrum via Multitapering.
     If NW == 1, it is a stft (short-time fourier transform). In fact tapers_n = 2*NW-1.
@@ -243,9 +284,13 @@ def moving_pmtm(data, win_size, win_step, freq_range, norm = None, NW = 4, Fs = 
         Length of the signal for the FFT analisys. The default value is
         max(256, 2**nextpow2(n_samples)).
         
+    kind : str, optional
+        Type of computation. It can be "milekovic" or "chronux".
+        The default value is chronux.
+        
     unity : str, optional
         Unity of the output computed power. It can be 'power' or 'db'. 
-        The default is 'db'.
+        The default is 'power'.
         
     verbose : bool, optional
         Narrate the several operations in this method. The default is False.
@@ -268,6 +313,9 @@ def moving_pmtm(data, win_size, win_step, freq_range, norm = None, NW = 4, Fs = 
     
     if type(data) is list:
         data = np.array(data)
+    
+    if kind not in ['milekovic','chronux']:
+        raise Exception('ERROR: kinds can only be "milekovic" or "chronux". You inputed "{}"!'.format(kind))
     
     # Number of channels
     if data.ndim == 1:
@@ -301,8 +349,8 @@ def moving_pmtm(data, win_size, win_step, freq_range, norm = None, NW = 4, Fs = 
             raise Exception('ERROR: normalisation array 2nd dimensions "{}" != from the number of channels {}!'.format(norm.shape[1],n_channels))
     
     for iWin, win_idx in enumerate(win_start):
-        _, Sk, w, NFFT = pmtm(data[win_idx:win_idx+win_size,:], NW, Fs)
-        psd, w, _ = compute_psd(Sk, w, NFFT, Fs, unit = unit)
+        Sk_complex, w, NFFT = pmtm(data[win_idx:win_idx+win_size,:], NW, Fs, kind = kind)
+        psd, w, _ = compute_psd(Sk_complex, w, NFFT, Fs, unit = unit, kind = kind)
         # Save values
         mt_spectrogram[iWin,:,:] = psd[freq_idx]
         
@@ -321,7 +369,8 @@ def moving_pmtm(data, win_size, win_step, freq_range, norm = None, NW = 4, Fs = 
 
 
 # Multitaper power estimation around an event
-def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event, post_event, norm = None, NW = 4, Fs = None, NFFT=None, unit = 'db', verbose=False):
+def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event, post_event,
+                        norm = None, NW = 4, Fs = None, NFFT=None, kind = 'chronux', unit = 'power', verbose=False):
     '''
     Compute the power spectrum via Multitapering.
     If NW == 1, it is a stft (short-time fourier transform). In fact tapers_n = 2*NW-1.
@@ -364,9 +413,13 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
         Length of the signal for the FFT analisys. The default value is
         max(256, 2**nextpow2(n_samples)).
         
+    kind : str, optional
+        Type of computation. It can be "milekovic" or "chronux".
+        The default value is chronux.
+        
     unity : str, optional
         Unity of the output computed power. It can be 'power' or 'db'. 
-        The default is 'db'.
+        The default is 'power'.
         
     verbose : bool, optional
         Narrate the several operations in this method. The default is False.
@@ -402,7 +455,10 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
     if (type(pre_event) is not int and type(pre_event) is not float) or \
         (type(post_event) is not int and type(post_event) is not float):
         raise Exception('ERROR: pre_event and post_event must be either an int or a float! You inputed: pre_event "{}", post_event "{}"'.format(type(pre_event),type(post_event)))
-        
+    
+    if kind not in ['milekovic','chronux']:
+        raise Exception('ERROR: kinds can only be "milekovic" or "chronux". You inputed "{}"!'.format(kind))
+    
     # Number of channels
     if data.ndim == 1:
         data = np.expand_dims(data, axis=1)
@@ -438,8 +494,8 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
     
     for iEv, event in enumerate(events):
         for iWin, win_idx in enumerate(win_start):
-            _, Sk, w, NFFT = pmtm(data[event+win_idx:event+win_idx+win_size,:], NW, Fs)
-            psd, w, _ = compute_psd(Sk, w, NFFT, Fs, unit = unit)
+            Sk_complex, w, NFFT = pmtm(data[event+win_idx:event+win_idx+win_size,:], NW, Fs, kind = kind)
+            psd, w, _ = compute_psd(Sk_complex, w, NFFT, Fs, unit = unit, kind = kind)
             # Save values
             mt_spectrogram[iWin,:,iEv,:] = psd[freq_idx]
     

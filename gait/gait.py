@@ -378,12 +378,12 @@ def gait_event_manual(td, signals, events, fs, **kwargs):
         
     # ========================================================================
     # Correct data with offset if present
-    if offset != 0:
-        for gait_events in gaits_events:
-            gait_events['offset'] = offset
+    for gait_events in gaits_events:
+        gait_events['offset'] = offset
+        if offset != 0:
             for event in events:
                 gait_events[event] = gait_events[event] - offset
-            
+        
     # Adjust outcome type
     if output_type == 'time':
         for gait_events in gaits_events:

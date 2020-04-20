@@ -869,8 +869,8 @@ def compute_filter(_td, **kwargs):
                     signal_name = field + '_sg_{}'.format(win_len)
                 else:
                     signal_name = field
-                
-                td_tmp[signal_name] = sgolay_filter(data = td_tmp[field], win_len = win_len, order=order)
+                # print('field: ' + field + '; win_len: ' + str(win_len) + '; order: ' + str(order))
+                td_tmp[signal_name] = sgolay_filter(data = td_tmp[field], win_len = int(win_len), order=order)
             
             elif kind == 'envelope':
                 if not override_fields:

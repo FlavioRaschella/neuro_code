@@ -9,8 +9,9 @@ This library contains filter for signal processing
 """
 
 import numpy as np
-from scipy.signal import butter, lfilter, filtfilt, detrend, hilbert, decimate, savgol_filter
+from scipy.signal import butter, lfilter, filtfilt, detrend, hilbert, decimate, savgol_filter, iirfilter
 from utils import transpose
+from mne.filter import notch_filter
 
 # Design filter
 def butter_bandpass(lowcut, highcut, fs, order=5):
@@ -64,9 +65,12 @@ def butter_highpass_filtfilt(data, highcut, fs, order=5):
     y = filtfilt(b, a, data)
     return y
 
+def notch_filtfilt(data, fs, fs_cut, fs_band, verbose = False):
+    # Fp1 = fs_cut - fs_band / 2 and Fs2 = fs_cut + fs_band / 2 
+    return notch_filter(x = data, Fs = fs, freqs = fs_cut, trans_bandwidth = fs_band, verbose = verbose)
+
 def sgolay_filter(data, win_len, order=5):
     return data - savgol_filter(x = data, window_length = win_len, polyorder = order)
-
 
 # Average
 def average(data):

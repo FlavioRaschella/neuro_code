@@ -983,7 +983,7 @@ def td_plot(td, y, **kwargs):
     
     style = '-'
     colours = None
-    
+    colours_range = None
     save_figure = False
     save_format = 'pdf'
     
@@ -1020,6 +1020,8 @@ def td_plot(td, y, **kwargs):
             sharey = value
         elif key == 'colours':
             colours = value
+        elif key == 'colours_range':
+            colours_range = value
         elif key == 'style':
             style = value
         elif key == 'x_ticks':
@@ -1161,6 +1163,17 @@ def td_plot(td, y, **kwargs):
     elif type(colours) == list and type(colours[0]) == list:
         col_list = colours 
         
+    # Check axis colours
+    if colours_range == None:
+        col_range_list = [[None] * max_signal_n] * len(y)
+    elif type(colours_range) == list and type(colours_range[0]) != list:
+        if len(colours_range) == 2:
+            col_range_list = [colours_range] * len(y)
+        else:
+            raise Exception('ERROR: colours_range can only have length == 2')
+    elif type(colours_range) == list and type(colours_range[0]) == list:
+        col_range_list = colours_range 
+        
     # Check axis style
     if style == None:
         style_list = [[None] * max_signal_n] * len(y)
@@ -1206,8 +1219,8 @@ def td_plot(td, y, **kwargs):
         events_list = [[]] * len(y)
 
     # Plot
-    for iPlt, (x, signal, xlim, ylim, xlab, ylab, col, style, x_tick, event_list, ax) in \
-        enumerate(zip(x_list, y, xlim_list, ylim_list, xlab_list, ylab_list, col_list, style_list, x_ticks_list, events_list, axs_list)):
+    for iPlt, (x, signal, xlim, ylim, xlab, ylab, col, style, x_tick, event_list, col_range, ax) in \
+        enumerate(zip(x_list, y, xlim_list, ylim_list, xlab_list, ylab_list, col_list, style_list, x_ticks_list, events_list, col_range_list, axs_list)):
         # break
         # Set plot title
         if type(signal) is list:
@@ -1292,31 +1305,61 @@ def td_plot(td, y, **kwargs):
                 if c == None:
                     if X.shape == td[sig].shape:
                         if kind == 'imshow':
-                            cs = ax.imshow(td[sig], extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto')
+                            if col_range == [None]:
+                                cs = ax.imshow(td[sig], extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto')
+                            else:
+                                cs = ax.imshow(td[sig], extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto', vmin = col_range[0], vmax = col_range[1])
                         else:
-                            cs = ax.contourf(X, Y, td[sig])
+                            if col_range == [None]:
+                                cs = ax.contourf(X, Y, td[sig])
+                            else:
+                                cs = ax.contourf(X, Y, td[sig], vmin = col_range[0], vmax = col_range[1])
                     else:
                         if kind == 'imshow':
-                            cs = ax.imshow(np.flip(td[sig].T,0), extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto')
+                            if col_range == [None]:
+                                cs = ax.imshow(np.flip(td[sig].T,0), extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto')
+                            else:
+                                cs = ax.imshow(np.flip(td[sig].T,0), extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto', vmin = col_range[0], vmax = col_range[1])
                         else:
-                            cs = ax.contourf(X, Y, td[sig].T)
+                            if col_range == [None]:
+                                cs = ax.contourf(X, Y, td[sig].T)
+                            else:
+                                cs = ax.contourf(X, Y, td[sig].T, vmin = col_range[0], vmax = col_range[1])
                 else:
                     if X.shape == td[sig].shape:
                         if kind == 'imshow':
-                            cs = ax.imshow(td[sig].T, extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto', cmap=c)
+                            if col_range == [None]:
+                                cs = ax.imshow(td[sig].T, extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto', cmap=c)
+                            else:
+                                cs = ax.imshow(td[sig].T, extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto', cmap=c, vmin = col_range[0], vmax = col_range[1])
                         else:
-                            cs = ax.contourf(X, Y, td[sig], cmap=c)
+                            if col_range == [None]:
+                                cs = ax.contourf(X, Y, td[sig], cmap=c)
+                            else:
+                                cs = ax.contourf(X, Y, td[sig], cmap=c, vmin = col_range[0], vmax = col_range[1])
                     else:
                         if kind == 'imshow':
-                            cs = ax.imshow(np.flip(td[sig].T,0),  extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto', cmap=c)
+                            if col_range == [None]:
+                                cs = ax.imshow(np.flip(td[sig].T,0),  extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto', cmap=c)
+                            else:
+                                cs = ax.imshow(np.flip(td[sig].T,0),  extent = [X.min(), X.max(), Y.min(), Y.max()], aspect = 'auto', cmap=c, vmin = col_range[0], vmax = col_range[1])
                         else:
-                            cs = ax.contourf(X, Y, td[sig].T, cmap=c)
-                        
+                            if col_range == [None]:
+                                cs = ax.contourf(X, Y, td[sig].T, cmap=c)
+                            else:
+                                cs = ax.contourf(X, Y, td[sig].T, cmap=c, vmin = col_range[0], vmax = col_range[1])
+                                
                 # norm_cm = cm.colors.Normalize(vmin=cs.cvalues.min(), vmax=cs.cvalues.max())
                 # sm = plt.cm.ScalarMappable(norm=norm_cm, cmap = cs.cmap)
                 # sm.set_array([])
                 # fig.colorbar(sm, ax = ax, ticks=cs.levels)
-                fig.colorbar(cs, ax = ax)
+                if col_range == [None]:
+                    fig.colorbar(cs, ax = ax)
+                else:
+                    m = plt.cm.ScalarMappable(cmap=c)
+                    m.set_array(td[sig])
+                    m.set_clim(col_range[0], col_range[1])
+                    fig.colorbar(m, ax = ax, boundaries=np.linspace(col_range[0], col_range[1], 10))
         
         # Manage ticks
         if x_tick == 'off' and iPlt not in bottom_idx:
