@@ -440,61 +440,6 @@ def add_params(_td, params, **kwargs):
     if not inplace:
         return td
 
-# CONSIDER REMOVING
-# def add_field_from_dict(_td, _dict, inplace = True, verbose = False):
-#     '''
-#     This function adds fields in a dict to another dict.
-    
-#     Parameters
-#     ----------
-#     _td : dict / list of dict
-#         dict of the trial data
-#     _dict : dict
-#         dict to add to trial data
-#     inplace : str, optional
-#         Perform operation on the input data dict. The default is False.
-#     verbose : bool, optional
-#         Describe what's happening in the code. The default is False.
-
-#     Returns
-#     -------
-#     td_out : dict/list of dict
-#         trial data dict with added items
-
-#     '''
-    
-#     if inplace:
-#         td = _td
-#     else:
-        # td = copy_dict(_td)
-    
-#     input_dict = False
-#     # check dict input variable
-#     if type(td) is dict:
-#         input_dict = True
-#         td = [td]
-        
-#     if type(td) is not list:
-#         raise Exception('ERROR: _td must be a list of dictionaries!')
-    
-#     # check string input variable
-#     if type(_dict) is not dict:
-#         raise Exception('ERROR: _dict input must be a dictionary!')
-        
-#     for td_tmp in td:
-#         if set(_dict.keys()) in set(td_tmp.keys()):
-#             if verbose:
-#                 print('Field {} already existing in td. NOT adding!')
-#         else:
-#             for k,v in _dict.items():
-#                 td_tmp[k] = v
-        
-#     if input_dict:
-#         td = td[0]
-    
-#     if not inplace:
-#         return td
-
 # =============================================================================
 # Combining
 # =============================================================================
@@ -611,6 +556,61 @@ def combine_fields(_td, _fields, **kwargs):
     if not inplace:
         return td
   
+
+def join_fields(_td, _fields, **kwargs):
+    '''
+    This function joins the fields in multiple dictionaries. It outputs only 
+    one dictionary.
+
+    Parameters
+    ----------
+    _td : list of dict
+        List of trial data.
+        
+    _fields : list of str, len (2)
+        Two fields to combine.
+
+    Returns
+    -------
+    td_out : dict
+        Trial data with fields joined together.
+
+    '''
+
+    # Check dict input variable
+    if type(_td) is not list:
+        raise Exception('ERROR: _td must be a list of dictionaries!')
+        
+    # check _fields input variable      
+    if type(_fields) is str:
+        _fields = [_fields]
+        
+    if type(_fields) is not list:
+        raise Exception('ERROR: _fields must be a list!')
+    
+    if not is_field(_td,_fields):
+        raise Exception('ERROR: _fields are missing from td!')
+    
+    # Set output variable
+    td_out = copy_dict(_td[0])
+    n_td = len(td_out[_fields[0]])
+    remove_all_fields_but(td_out, _fields, inplace = True)
+    
+    for td_tmp in _td[1:]:
+        for field in _fields:
+            td_out[field] = np.concatenate((td_out[field], td_tmp[field]))
+        n_td += len(td_tmp[field])
+           
+    # Check fields length
+    for field in _fields:
+        if len(td_out[field]) != n_td:
+            raise Exception('ERROR: length in fields is different from total length!')
+    
+    if 'params' in _td[0].keys():
+        td_out['params'] = copy_dict(_td[0]['params'])
+        
+    return td_out
+
     
 def combine_dicts(td_tuple, inplace = True):
     """        

@@ -16,12 +16,12 @@ from loading_data import load_data_from_folder
 from td_utils import is_field, combine_fields, combine_dicts, td_subfield, extract_dicts
 from td_utils import remove_fields, remove_all_fields_but, add_params
 
-from utils import group_fields, convert_list_to_array, copy_dict, flatten_list, find_values, find_first
+from utils import group_fields, convert_list_to_array, copy_dict, flatten_list, find_values, find_first, transpose
 
 # Processing libs
 from processing import artefacts_removal, convert_points_to_target_vector, get_epochs, convert_time_samples
 
-from power_estimation import moving_pmtm
+from power_estimation import moving_pmtm, moving_pmtm_trigger
 
 from filters import sgolay_filter, downsample_signal, moving_average, envelope
 from filters import butter_bandpass_filtfilt as bpff
@@ -104,6 +104,9 @@ def segment_data(_td, td_epoch, fs, **kwargs):
     if type(td) is dict:
         td = [td]
     
+    if type(td_epoch) is dict:
+        td_epoch = [td_epoch]
+    
     if len(td) != len(td_epoch):
         raise Exception('ERROR: td and td_segment must have the same length!')
     
@@ -120,7 +123,7 @@ def segment_data(_td, td_epoch, fs, **kwargs):
         for epoch in epochs:
             td_out_tmp = td_tmp.copy()
             for k,v in td_out_tmp.items():
-                if k != 'params':
+                if k != 'params' and 'time' not in k:
                     td_out_tmp[k] = np.array(v)[epoch]
                 elif 'time' in k:
                     td_out_tmp[k] = np.array(v)[epoch] - np.array(v)[epoch][0]
@@ -507,11 +510,11 @@ def compute_multitaper(_td, **kwargs):
         If str, it can either be one key in td or the path in td where to find 
         the fs in td (e.g. params/data/data).
         
-    window_size_sec : int / float, optional
+    win_size : int / float, optional
         Size of the sliding window for computing the pmtm. It is in seconds.
         The default is 0.25 seconds.
         
-    window_step_sec : int / float, optional
+    win_step : int / float, optional
         Step of the sliding window for computing the pmtm. It is in seconds.
         The default is 0.01 seconds.
         
@@ -534,6 +537,10 @@ def compute_multitaper(_td, **kwargs):
         Fields in td containing the target signals (binary signals).
         It can either be one key in td or the path in td where to find the 
         target signal (e.g. params/data/data).
+        
+    kind : str, optional
+        Select the type of spectrogram computation: 'chronux' or 'milekovic'. 
+        The default is 'chronux'.
         
     inplace : bool, optional
         Perform operation on the input data dict. The default is True.
@@ -559,15 +566,18 @@ def compute_multitaper(_td, **kwargs):
     freq_max = 100
     unit = 'db'
     adjust_target = False
+    
+    kind = 'chronux'
+    
     inplace = True
     verbose = False
 
     # Check input variables
     for key,value in kwargs.items():
         key = key.lower()
-        if key == 'wind_size':
+        if key == 'win_size':
             window_size_sec = value
-        elif key == 'wind_step':
+        elif key == 'win_step':
             window_step_sec = value
         elif key == 'freq_start':
             freq_min = value
@@ -585,6 +595,8 @@ def compute_multitaper(_td, **kwargs):
             fields = value
         elif key == 'inplace':
             inplace = value
+        elif key == 'kind':
+            kind = value
         elif key == 'verbose':
             verbose = value
         elif key == 'adjust_target':
@@ -662,7 +674,9 @@ def compute_multitaper(_td, **kwargs):
         data_fields = [td_tmp[field] for field in fields]
         data = convert_list_to_array(data_fields, axis = 1)
         # Compute pmtm
-        mt_spectrogram, sfreqs, stimes = moving_pmtm(data, window_size_smp, window_step_smp, freq_range, norm = norm, NW = NW, Fs = fs, unit = unit, verbose=verbose)
+        mt_spectrogram, sfreqs, stimes = moving_pmtm(data, 
+                        window_size_smp, window_step_smp, freq_range, kind = kind,
+                        norm = norm, NW = NW, Fs = fs, unit = unit, verbose=verbose)
         for iFld, field in enumerate(fields):
             td_tmp[field] = mt_spectrogram[:,:,iFld]
         # Update frequency info
@@ -691,6 +705,221 @@ def compute_multitaper(_td, **kwargs):
     
     return td
 
+
+def compute_multitaper_trigger(_td, **kwargs):
+    '''
+    This function computes the multitapers spectal analysis for the signals in td (e.g. td[fields]).
+
+    Parameters
+    ----------
+    _td : dict / list of dict, len (n_td)
+        Trial data.
+        
+    fields : str / list of str, len (n_fields)
+        Fields in td from which collect the data to convert.
+        If str, it can either be the key in td or the path in td where to find 
+        the name of the signals to use in td (e.g. params/data/data).
+        
+    fs : str / int
+        Sampling frequency.
+        If str, it can either be one key in td or the path in td where to find 
+        the fs in td (e.g. params/data/data).
+        
+    events : np.ndarray, shape (n_events,), optional
+        Events around which to compute the spectrogram. The events are in samples.
+        
+    win_size : int / float, optional
+        Size of the sliding window for computing the pmtm. It is in seconds.
+        The default is 0.25 seconds.
+        
+    win_step : int / float, optional
+        Step of the sliding window for computing the pmtm. It is in seconds.
+        The default is 0.01 seconds.
+        
+    pre_event : int, option
+        Samples before the event to use for the pmtm. win_step/2 will be added
+        to pre_event to account for the windowing. It is in Fs.
+        
+    post_event : int, option
+        Samples after the event to use for the pmtm. win_step/2 will be added
+        to pre_event to account for the windowing. It is in Fs.
+        
+    NW : int, optional
+        Time Half-Bandwidth Product for computing the pmtm. The default is 4.
+        
+    freq_min : int / float, optional
+        Minimum frequency in the stored frequency band of the spectogram.
+        The default is 10.
+         
+    freq_max : int / float, optional
+        Maximum frequency in the stored frequency band of the spectogram.
+        The default is 100.
+        
+    unity : str, optional
+        Unity of the output computed power. It can be 'power' or 'db'. 
+        The default is 'db'.
+        
+    adjust_target : str, optional
+        Fields in td containing the target signals (binary signals).
+        It can either be one key in td or the path in td where to find the 
+        target signal (e.g. params/data/data).
+        
+    kind : str, optional
+        Select the type of spectrogram computation: 'chronux' or 'milekovic'. 
+        The default is 'chronux'.
+        
+    inplace : bool, optional
+        Perform operation on the input data dict. The default is True.
+        
+    verbose : bool, optional
+        Narrate the several operations in this method. The default is False.
+
+    Returns
+    -------
+    td : dict / list of dict, len (n_td)
+        trial data with signals analysed based on the multitaper parameters.
+
+    '''
+    # Multitaper information
+    fields = None
+    fs = None
+    fs_string = ''
+    window_size_sec = 0.25 # in seconds
+    window_step_sec = 0.01 # in seconds
+    norm = None
+    NW = 4
+    freq_min = 10
+    freq_max = 100
+    unit = 'db'
+    
+    pre_event = None
+    post_event = None
+    
+    kind = 'chronux'
+    events = []
+    
+    inplace = True
+    verbose = False
+
+    # Check input variables
+    for key,value in kwargs.items():
+        key = key.lower()
+        if key == 'win_size':
+            window_size_sec = value
+        elif key == 'win_step':
+            window_step_sec = value
+        elif key == 'events':
+            events = value
+        elif key == 'pre_event':
+            pre_event = value
+        elif key == 'post_event':
+            post_event = value
+        elif key == 'freq_start':
+            freq_min = value
+        elif key == 'freq_stop':
+            freq_max = value
+        elif key == 'unit':
+            unit = value
+        elif key == 'norm':
+            norm = value
+        elif key == 'nw':
+            NW = value
+        elif key == 'fs':
+            fs = value
+        elif key == 'fields':
+            fields = value
+        elif key == 'inplace':
+            inplace = value
+        elif key == 'kind':
+            kind = value
+        elif key == 'verbose':
+            verbose = value
+        else:
+            print('WARNING: key "{}" not recognised by the compute_multitaper function...'.format(key))
+    
+    if inplace:
+        td = _td
+    else:
+        td = copy_dict(_td)
+    
+    # Check input values
+    input_dict = False
+    if type(td) is dict:
+        input_dict = True
+        td = [td]
+    if type(td) is not list:
+        raise Exception('ERROR: _td must be a list of dictionaries!')
+    if fields == None:
+        raise Exception('ERROR: fields must be assigned!')
+    if fs == None:
+        raise Exception('ERROR: fs must be assigned!')
+    
+    # Check fs 
+    if type(fs) is str:
+        if '/' in fs:
+            fs_string = fs
+            fs = td_subfield(td[0],fs)['fs']
+        else:
+            fs = td[0][fs]
+
+    if pre_event is None:   
+        pre_event = fs
+        
+    if post_event is None:   
+        post_event = fs
+            
+    # Check fields        
+    if type(fields) is str and '/' in fields:
+        fields = td_subfield(td[0],fields)['signals']
+    if type(fields) is str:
+        fields = [fields]
+    if type(fields) is not list:
+        raise Exception('ERROR: fields must be a list of strings!')
+        
+    # Compute number of tapers
+    tapers_n = (np.floor(2*NW)-1).astype('int')
+    if verbose:
+        print('# of tapes used = {}'.format(tapers_n))
+    # Get frequency range
+    freq_range = [freq_min , freq_max]
+    
+    # Get window's info in samples
+    window_size_smp = round(window_size_sec * fs)
+    window_step_smp = round(window_step_sec * fs)
+    
+    # Loop over the data trials
+    for iTd, td_tmp in enumerate(td):
+        if verbose:
+            print('\nProcessing signals in td {}/{}'.format(iTd+1, len(td)))
+        
+        # Collect data
+        data_fields = [td_tmp[field] for field in fields]
+        data = convert_list_to_array(data_fields, axis = 1)
+        # Compute pmtm
+        mt_spectrogram, sfreqs, stimes = moving_pmtm_trigger(data, 
+                        events, window_size_smp, window_step_smp, freq_range, 
+                        pre_event = pre_event, post_event = post_event,
+                        kind = kind, norm = norm, NW = NW, Fs = fs, unit = unit, verbose=verbose)
+        for iFld, field in enumerate(fields):
+            td_tmp[field] = mt_spectrogram[:,:,:,iFld]
+        # Update frequency info
+        if fs_string == '': # Not using params
+            td_tmp['freq'] = sfreqs
+            td_tmp['time'] = stimes
+        else: # Using params
+            subfields = td_subfield(td[0],fs_string)
+            subfields['fs'] = 1/(stimes[1] - stimes[0])
+            td_tmp[subfields['time']] = stimes
+            subfields['freq'] = 'freq'
+            td_tmp[subfields['freq']] = sfreqs
+    
+    if input_dict:
+        td = td[0]
+    
+    return td
+
+
+
 def compute_filter(_td, **kwargs):
     '''
     This function computes filters for the signals in td (e.g. td[fields]).
@@ -716,6 +945,10 @@ def compute_filter(_td, **kwargs):
          
     order : int , optional
         Order of the filter. The default value is 5.
+         
+    add_operation : str , optional
+        Manipulate the data after computing the filter, by 'add' or 'subtract'
+        the filtered signal from the original one. The default value is None.
         
     f_low : int / float, optional
         Frequency value for low pass filtering. It is used for 'bandpass',
@@ -759,6 +992,7 @@ def compute_filter(_td, **kwargs):
     f_high = None
     win_len = None
     order = 5
+    add_operation = None
     override_fields = True
     save_to_params = False
     inplace = True
@@ -781,6 +1015,8 @@ def compute_filter(_td, **kwargs):
             win_len = value
         elif key == 'order':
             order = value
+        elif key == 'add_operation':
+            add_operation = value
         elif key == 'inplace':
             inplace = value
         elif key == 'verbose':
@@ -791,7 +1027,7 @@ def compute_filter(_td, **kwargs):
             save_to_params = True
             save_to_params_field = value
         else:
-            print('WARNING: key "{}" not recognised by the compute_multitaper function...'.format(key))
+            print('WARNING: key "{}" not recognised by the compute_filter function...'.format(key))
     
     if kind not in ['bandpass','lowpass','highpass','sgolay','envelope']:
         raise Exception('ERROR: kind specified "{}" is not implemented!'.format(kind))
@@ -835,6 +1071,15 @@ def compute_filter(_td, **kwargs):
                 win_len += 1
                 print('WARNING: 1 added to win_len because win_len is even. It must be odd for sgolay!')
     
+    if kind == 'sgolay' and win_len == None:
+        raise Exception('ERROR: for sgolay filter you must input win_len!')
+    
+    if add_operation != None :
+        if add_operation not in ['add','subtract']:
+            raise Exception('ERROR: add_operation can only be "add" or "subtract"! You inputed {}.'.format(add_operation))
+        else:
+            print('WARNING: add_operation only implemented for sgolay filter!')
+    
     # Compute filters
     for td_tmp in td:
         signals_name = []
@@ -870,7 +1115,14 @@ def compute_filter(_td, **kwargs):
                 else:
                     signal_name = field
                 # print('field: ' + field + '; win_len: ' + str(win_len) + '; order: ' + str(order))
-                td_tmp[signal_name] = sgolay_filter(data = td_tmp[field], win_len = int(win_len), order=order)
+                data_filt = sgolay_filter(data = td_tmp[field], win_len = int(win_len), order=order)
+                if add_operation != None:
+                    if add_operation == 'add':
+                        td_tmp[signal_name] = td_tmp[field] + data_filt
+                    elif add_operation == 'subtract':
+                        td_tmp[signal_name] = td_tmp[field] - data_filt
+                else:
+                    td_tmp[signal_name]  = data_filt
             
             elif kind == 'envelope':
                 if not override_fields:
@@ -967,7 +1219,7 @@ def compute_mav(_td, **kwargs):
             adjust_target = True
             adjust_target_field = value
         else:
-            print('WARNING: key "{}" not recognised by the compute_multitaper function...'.format(key))
+            print('WARNING: key "{}" not recognised by the compute_mav function...'.format(key))
     
     if inplace:
         td = _td
@@ -1206,7 +1458,7 @@ def extract_features_instant(td, **kwargs):
                     no_event_td = np.round(no_event/len(td)).astype('int')
                     
                     for td_tmp in td:
-                        data_fields = [td_tmp[field] for field in fields]
+                        data_fields = [transpose(td_tmp[field],'column') for field in fields]
                         
                         # Check dimension in data
                         data_fields_features = []
@@ -1389,18 +1641,15 @@ def cleaning_pipeline(td, **kwargs):
         td_artefacts = identify_artefacts(td, **remove_artefacts_dict)
         
     if add_segmentation_dict != None:
-        td_segment = add_segmentation_dict['epochs']
+        td_segment = {'epochs' : add_segmentation_dict['epochs']}
     
     # Combine artefacts and segmentation
     if remove_artefacts_dict != None and add_segmentation_dict != None:
-        td_epoch = combine_epochs(td_artefacts, td_segment)
+        td = segment_data(td, combine_epochs(td_artefacts, td_segment), remove_artefacts_dict['fs'], invert_epoch = True)
     elif remove_artefacts_dict == None and add_segmentation_dict != None:
-        td_epoch = td_segment
+        td = segment_data(td, td_segment, add_segmentation_dict['fs'], invert_epoch = True)
     elif remove_artefacts_dict != None and add_segmentation_dict == None:
-        td_epoch = td_artefacts
-    
-    if remove_artefacts_dict != None or add_segmentation_dict != None:
-        td = segment_data(td, td_epoch, remove_artefacts_dict['fields'], invert_epoch = True)
+        td = segment_data(td, td_artefacts, remove_artefacts_dict['fs'], invert_epoch = True)
     
     return td
 

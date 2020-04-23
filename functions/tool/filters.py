@@ -70,7 +70,7 @@ def notch_filtfilt(data, fs, fs_cut, fs_band, verbose = False):
     return notch_filter(x = data, Fs = fs, freqs = fs_cut, trans_bandwidth = fs_band, verbose = verbose)
 
 def sgolay_filter(data, win_len, order=5):
-    return data - savgol_filter(x = data, window_length = win_len, polyorder = order)
+    return savgol_filter(x = data, window_length = win_len, polyorder = order)
 
 # Average
 def average(data):

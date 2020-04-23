@@ -411,10 +411,10 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
     subject kinematics.
     
     Events to mark are hard-coded:
-        RHS: 1
-        RTO: 2
-        LHS: 3
-        LTO: 4
+        LHS: 1
+        LTO: 2
+        RHS: 3
+        RTO: 4
         Turn_on: 5
         Turn_off: 6
     
@@ -445,6 +445,10 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
         Set whether the output values should be in 'time' or 'samples'.
         The default value is 'time'.
         
+    aspect_ratio : str, optional
+        Set the borders of the space where the sticks are plotted. It can 
+        either be 'full' or 'auto'. The default is 'full'.
+        
     events_file : str, optional
         Path of an existing file containing marked events. events_file must 
         contain PATH/FILENAME.FORMAT because this is the way the code regognises
@@ -473,6 +477,7 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
     coordinates = ['x','y','z']
     offset = 0
     output_type = 'time'
+    aspect_ratio = 'full'
     events_file = ''
     save_name = ''
     verbose = False
@@ -485,6 +490,8 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
             offset = value
         elif key == 'output_type':
             output_type = value
+        elif key == 'aspect_ratio':
+            aspect_ratio = value
         elif key == 'events_file':
             events_file = value
         elif key == 'save_name':
@@ -535,7 +542,11 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
 
     # Check if there is a file to get the events from
     if type(events_file) is not str:
-        raise Exception('ERROR: events_file must be s string. You inputed a "{}".'.format(type(events_file)))
+        raise Exception('ERROR: events_file must be a string. You inputed a "{}".'.format(type(events_file)))
+    
+    # Check aspect_ratio
+    if aspect_ratio not in ['full', 'auto']:
+        raise Exception('ERROR: aspect_ratio can either be "full" or "auto". You inputed a "{}".'.format(aspect_ratio))
     
     if events_file != '':
         indexes_slash = find_substring_indexes(events_file,'/')
@@ -617,13 +628,13 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
         elif input_key.key == 'backspace':
             output = 3
         elif input_key.key == '1':
-            output = events_right[0] #'RHS'
-        elif input_key.key == '2':
-            output = events_right[1] #'RTO'
-        elif input_key.key == '3':
             output = events_left[0] #'LHS'
-        elif input_key.key == '4':
+        elif input_key.key == '2':
             output = events_left[1] #'LTO'
+        elif input_key.key == '3':
+            output = events_right[0] #'RHS'
+        elif input_key.key == '4':
+            output = events_right[1] #'RTO'
         elif input_key.key == '5':
             output = events_other[0] #'Turn_on'
         elif input_key.key == '6':
@@ -647,28 +658,36 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
     for coordinate in coordinates:
         xyz_lim[coordinate] = [+np.inf, -np.inf]
     
-    for body_part in kin_var.keys():
-        for coordinate in coordinates:
-            if xyz_lim[coordinate][0] > np.min(kin_var[body_part][coordinate]):
-                xyz_lim[coordinate][0] = np.min(kin_var[body_part][coordinate])
-            if xyz_lim[coordinate][1] < np.max(kin_var[body_part][coordinate]):
-                xyz_lim[coordinate][1] = np.max(kin_var[body_part][coordinate])
+    if aspect_ratio == 'full':
+        for body_part in kin_var.keys():
+            for coordinate in coordinates:
+                if xyz_lim[coordinate][0] > np.min(kin_var[body_part][coordinate]):
+                    xyz_lim[coordinate][0] = np.min(kin_var[body_part][coordinate])
+                if xyz_lim[coordinate][1] < np.max(kin_var[body_part][coordinate]):
+                    xyz_lim[coordinate][1] = np.max(kin_var[body_part][coordinate])
+    else:
+        for body_part in kin_var.keys():
+            for coordinate in coordinates:
+                if xyz_lim[coordinate][0] > np.min(kin_var[body_part][coordinate][0,:]):
+                    xyz_lim[coordinate][0] = np.min(kin_var[body_part][coordinate][0,:])
+                if xyz_lim[coordinate][1] < np.max(kin_var[body_part][coordinate][0,:]):
+                    xyz_lim[coordinate][1] = np.max(kin_var[body_part][coordinate][0,:])
 
     # Plot
     fig = plt.figure()
     ax = fig.gca(projection='3d')
-    if len(coordinates) == 3:
-        ax.set_xlabel('{} axis'.format(coordinates[0]))
-        ax.set_ylabel('{} axis'.format(coordinates[1]))
-        ax.set_zlabel('{} axis'.format(coordinates[2]))
-        ax.set_xlim(xyz_lim[coordinates[0]])
-        ax.set_ylim(xyz_lim[coordinates[1]])
-        ax.set_zlim(xyz_lim[coordinates[2]])
-    else:
-        ax.set_xlabel('{} axis'.format(coordinates[0]))
-        ax.set_ylabel('{} axis'.format(coordinates[1]))
-        ax.set_xlim(xyz_lim[coordinates[0]])
-        ax.set_ylim(xyz_lim[coordinates[1]])
+    # if len(coordinates) == 3:
+    #     ax.set_xlabel('{} axis'.format(coordinates[0]))
+    #     ax.set_ylabel('{} axis'.format(coordinates[1]))
+    #     ax.set_zlabel('{} axis'.format(coordinates[2]))
+    #     ax.set_xlim(xyz_lim[coordinates[0]])
+    #     ax.set_ylim(xyz_lim[coordinates[1]])
+    #     ax.set_zlim(xyz_lim[coordinates[2]])
+    # else:
+    #     ax.set_xlabel('{} axis'.format(coordinates[0]))
+    #     ax.set_ylabel('{} axis'.format(coordinates[1]))
+    #     ax.set_xlim(xyz_lim[coordinates[0]])
+    #     ax.set_ylim(xyz_lim[coordinates[1]])
     
     # Flag for stopping the marking
     not_stop_loop = True
@@ -680,24 +699,57 @@ def gait_event_manual_stick_plot(td, kinematics, fs, **kwargs):
         for body_part, values in kin_var.items():
             if len(coordinates) == 3:
                 ax.plot(kin_var[body_part][coordinates[0]][sample_idx,:],kin_var[body_part][coordinates[1]][sample_idx,:],kin_var[body_part][coordinates[2]][sample_idx,:], Color = body_part_color[body_part])
-                ax.set_xlabel('{} axis'.format(coordinates[0]))
-                ax.set_ylabel('{} axis'.format(coordinates[1]))
-                ax.set_zlabel('{} axis'.format(coordinates[2]))
-                ax.set_xlim(xyz_lim[coordinates[0]])
-                ax.set_ylim(xyz_lim[coordinates[1]])
-                ax.set_zlim(xyz_lim[coordinates[2]])
+                # ax.set_xlabel('{} axis'.format(coordinates[0]))
+                # ax.set_ylabel('{} axis'.format(coordinates[1]))
+                # ax.set_zlabel('{} axis'.format(coordinates[2]))
+                # ax.set_xlim(xyz_lim[coordinates[0]])
+                # ax.set_ylim(xyz_lim[coordinates[1]])
+                # ax.set_zlim(xyz_lim[coordinates[2]])
             else:
                 ax.plot(kin_var[body_part][coordinates[0]][sample_idx,:],kin_var[body_part][coordinates[1]][sample_idx,:], Color = body_part_color[body_part])
-                ax.set_xlabel('{} axis'.format(coordinates[0]))
-                ax.set_ylabel('{} axis'.format(coordinates[1]))
-                ax.set_xlim(xyz_lim[coordinates[0]])
-                ax.set_ylim(xyz_lim[coordinates[1]])
+                # ax.set_xlabel('{} axis'.format(coordinates[0]))
+                # ax.set_ylabel('{} axis'.format(coordinates[1]))
+                # ax.set_xlim(xyz_lim[coordinates[0]])
+                # ax.set_ylim(xyz_lim[coordinates[1]])
+        
+        # Set space limits
+        if aspect_ratio == 'auto':
+            for coordinate in coordinates:
+                xyz_lim[coordinate] = [+np.inf, -np.inf]
+            for body_part in kin_var.keys():
+                for coordinate in coordinates:
+                    if xyz_lim[coordinate][0] > np.min(kin_var[body_part][coordinate][sample_idx,:]):
+                        if coordinate != coordinates[-1]:
+                            xyz_lim[coordinate][0] = np.min(kin_var[body_part][coordinate][sample_idx,:])-1
+                        else:
+                            xyz_lim[coordinate][0] = np.min(kin_var[body_part][coordinate][sample_idx,:])
+                    if xyz_lim[coordinate][1] < np.max(kin_var[body_part][coordinate][sample_idx,:]):
+                        if coordinate != coordinates[-1]:
+                            xyz_lim[coordinate][1] = np.max(kin_var[body_part][coordinate][sample_idx,:])+1
+                        else:
+                            xyz_lim[coordinate][1] = np.max(kin_var[body_part][coordinate][sample_idx,:])
+            
+        if len(coordinates) == 3:
+            ax.plot(kin_var[body_part][coordinates[0]][sample_idx,:],kin_var[body_part][coordinates[1]][sample_idx,:],kin_var[body_part][coordinates[2]][sample_idx,:], Color = body_part_color[body_part])
+            ax.set_xlabel('{} axis'.format(coordinates[0]))
+            ax.set_ylabel('{} axis'.format(coordinates[1]))
+            ax.set_zlabel('{} axis'.format(coordinates[2]))
+            ax.set_xlim(xyz_lim[coordinates[0]])
+            ax.set_ylim(xyz_lim[coordinates[1]])
+            ax.set_zlim(xyz_lim[coordinates[2]])
+        else:
+            ax.plot(kin_var[body_part][coordinates[0]][sample_idx,:],kin_var[body_part][coordinates[1]][sample_idx,:], Color = body_part_color[body_part])
+            ax.set_xlabel('{} axis'.format(coordinates[0]))
+            ax.set_ylabel('{} axis'.format(coordinates[1]))
+            ax.set_xlim(xyz_lim[coordinates[0]])
+            ax.set_ylim(xyz_lim[coordinates[1]])
+        
         
         # Plot title
         if 'File' in td.keys():
-            plt.suptitle('Stick plot. File: {}\nRHS:1, RTO:2, LHS:3, LTO:4, T_on:5, T_off:6\nSample {}/{}'.format(td['File'],sample_idx,signals_len-1))
+            plt.suptitle('Stick plot. File: {}\nLHS:1, LTO:2, RHS:3, RTO:4, T_on:5, T_off:6\nSample {}/{}'.format(td['File'],sample_idx,signals_len-1))
         else:
-            plt.suptitle('Stick plot./nRHS:1, RTO:2, LHS:3, LTO:4, T_on:5, T_off:6\nSample {}/{}'.format(sample_idx,signals_len-1))
+            plt.suptitle('Stick plot./nLHS:1, LTO:2, RHS:3, RTO:4, T_on:5, T_off:6\nSample {}/{}'.format(sample_idx,signals_len-1))
         
         # Check whether there are events
         is_there_an_event = False
@@ -1081,9 +1133,6 @@ def stick_plot_video(td, kinematics, **kwargs):
     idx_stop : int/float, optional
         Stopping point of the stick plot. It is in samples or percentage (0-1)
         of the whole signal. The default is 0.
-        
-    events : str / list of str, len (n_events)
-        Name of the events to plot.
     
     verbose : str, optional
         Narrate the several operations in this method. The default is False.
@@ -1105,7 +1154,6 @@ def stick_plot_video(td, kinematics, **kwargs):
     pause = .1
     idx_start = 0
     idx_stop = 0
-    events = None
     verbose = False
     
     # Check input variables
@@ -1120,8 +1168,6 @@ def stick_plot_video(td, kinematics, **kwargs):
             idx_start = value
         elif key == 'idx_stop':
             idx_stop = value
-        elif key == 'events':
-            events = value
         elif key == 'verbose':
             verbose = value
         else:

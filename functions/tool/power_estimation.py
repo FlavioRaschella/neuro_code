@@ -380,7 +380,7 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
     data : np.ndarray, shape (n_samples, n_channels)
         Input data vector.
         
-    events : list of int, len (n_events)
+    events : list of int, len (n_events) or np.ndarray, shape (n_events,)
         List of events around which to compute the pmtm. It is in samples.
         
     win_size : int
@@ -394,11 +394,11 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
         
     pre_event : int
         Samples before the event to use for the pmtm. win_step/2 will be added
-        to pre_event to account for the windowing.
+        to pre_event to account for the windowing. It is in samples.
         
     post_event : int
         Samples after the event to use for the pmtm. win_step/2 will be added
-        to pre_event to account for the windowing.
+        to pre_event to account for the windowing. It is in samples.
         
     norm : np.ndarray, shape (n_freq, n_channels), optional
         Normalisation values for each channel. The default is None.
@@ -444,14 +444,11 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
         data = np.array(data)
     
     if type(events) is int or type(events) is float:
-        events = [events]
+        events = np.array([events])
         
-    if type(events) is np.ndarray:
-        events = events.tolist()
+    if type(events) is list:
+        events = np.array(events)
         
-    if type(events) is not list:
-        raise Exception('ERROR: events must be a list! You inputed a "{}"'.format(type(events)))
-    
     if (type(pre_event) is not int and type(pre_event) is not float) or \
         (type(post_event) is not int and type(post_event) is not float):
         raise Exception('ERROR: pre_event and post_event must be either an int or a float! You inputed: pre_event "{}", post_event "{}"'.format(type(pre_event),type(post_event)))
@@ -466,9 +463,7 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
         data = transpose(data, 'column')
         
     n_channels = data.shape[1]
-    n_events = len(events)
-    if verbose:
-        print('Number of events: {}. Number of channels: {}.'.format(n_events, n_channels))
+    n_samples = data.shape[0]
 
     # Set win_size in int format
     win_size = int(win_size)
@@ -476,6 +471,16 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
     pre_event = int(pre_event + win_size/2)
     post_event = int(post_event + win_size/2)
     
+    # Check for events out of signal range
+    event2del = np.where(np.logical_or(events-int(pre_event) < 0, pre_event+int(post_event)>n_samples))[0]
+    if len(event2del) != 0:
+        events = np.delete(events, event2del)
+    n_events = len(events)
+    if verbose:
+        print('Number of events: {}. Number of channels: {}.'.format(n_events, n_channels))
+    # Tranform events to list
+    events = events.tolist()
+   
     # Compute pmtm features
     win_start = np.arange(-pre_event,post_event-win_size+win_step,win_step).astype('int')
     df, sfreqs, stimes, freq_idx = process_spectrogram_params(win_start, win_size, freq_range, Fs)
@@ -523,7 +528,7 @@ def get_informative_bands(mt_spectrogram, sfreqs = [], plot = None):
 
     Parameters
     ----------
-    mt_spectrogram : np.ndarray, shape (n_samples, n_freq)
+    mt_spectrogram : np.ndarray, shape (n_samples, n_freq, n_channels)
         Spectogram if the signal.
         
     sfreqs : np.ndarray, shape (n_freq, ), optional
@@ -531,20 +536,28 @@ def get_informative_bands(mt_spectrogram, sfreqs = [], plot = None):
         
     Returns
     -------
-    spect_band_info : np.ndarray
+    spect_band_info : np.ndarray, shape (n_freq, n_channels)
         Show the bands which contains the most information
+        
+    spect_mean : np.ndarray, shape (n_freq, n_channels)
+        Mean bands activity.
+        
+    spect_std : np.ndarray, shape (n_freq, n_channels)
+        STD for frequency bands.
     '''
-
+    
     spect_mean = np.mean(mt_spectrogram, axis = 0)
     spect_std = np.std(mt_spectrogram, axis = 0)
-    spect_info_band = spect_std/spect_mean
+    spect_info_band = transpose(spect_std/spect_mean,'column')
     
     if plot and sfreqs == []:
+        plt.figure()
         plt.plot(spect_info_band)
     elif plot:
+        plt.figure()
         plt.plot(sfreqs, spect_info_band)
         
-    return spect_info_band, spect_mean
+    return spect_info_band, spect_mean, spect_std
 
 # EOF
     

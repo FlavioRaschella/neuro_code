@@ -16,8 +16,11 @@ Pag 106 - 119
 import numpy as np
 # Import cholesky lib
 from scipy.linalg import cholesky
+# Import sklearn base classes
+from sklearn.base import BaseEstimator
 # Import sklearn accuracy metrics lib
 from sklearn.metrics import accuracy_score, mutual_info_score
+
 
 def _mean_cov(X, y):
     """Compute class mean and covariance matrix.
@@ -76,7 +79,7 @@ def _class_means(X, y):
     return means
 
 
-class rLDA(object):
+class rLDA(BaseEstimator):
     '''
     Linear Discriminant Analysis
 
