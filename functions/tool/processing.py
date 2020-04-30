@@ -6,11 +6,125 @@ Created on Tue Feb 18 15:07:29 2020
 @author: raschell
 """
 
+# Import numpy lib
 import numpy as np
-import matplotlib.pyplot as plt
+# Import processing libs
 from scipy import interpolate
-from utils import find_first
+# Import utils libs
+from utils import find_first, transpose, find_values
+# Impot plotting libs
+import matplotlib.pyplot as plt
 
+# =============================================================================
+# Signal processing
+# =============================================================================
+def get_baseline(data):
+    
+    if type(data) is np.ndarray:
+        data = [data]
+    if type(data) is not list:
+        raise Exception('ERROR: data is not list!')
+    
+    # Combine data
+    data_comb = []
+    for dt in data:
+        data_comb.append(transpose(dt,'column'))
+    data_comb = np.concatenate(data_comb, axis = 0)
+    
+    # Compute stats
+    n_data = data_comb.shape[0]
+    data_mean = np.mean(data_comb, axis = 0)
+    data_std = np.std(data_comb, axis = 0)
+    
+    return data_comb, data_mean, data_std, n_data
+    
+
+def get_trigger_data(data, events, before_event, after_event, mean_norm = [], std_norm = []):
+    
+    if type(data) is np.ndarray:
+        data = [data]
+    if type(data) is not list:
+        raise Exception('ERROR: data is not list!')
+        
+    if type(events) is np.ndarray:
+        events = [events]
+    if type(events) is not list:
+        raise Exception('ERROR: events is not list!')
+        
+    if len(events) != len(data):
+        raise Exception('ERROR: len(events) {} != len(data) {}.'.format(len(events), len(data)))
+    
+    # Check n_channles and n_events
+    n_channles = []
+    n_events = []
+    for dt, event in zip(data, events):
+        if dt.ndim == 1:
+            n_channles.append(1)
+            dt = np.expand_dims(dt,1)
+        else:
+            n_channles.append(dt.shape[1])
+        if event.ndim == 1:
+            n_events.append(1)
+            event = np.expand_dims(event,1)
+        else:
+            n_events.append(event.shape[1])
+    if (np.diff(n_channles)>0.1).any():
+        raise Exception('ERROR: data does not have a fixed n_channles.')
+    else:
+        n_channles = n_channles[0]
+    if (np.diff(n_events)>0.1).any():
+        raise Exception('ERROR: events does not have a fixed n_events.')
+    else:
+        n_events = n_events[0]
+    
+    if type(before_event) is not int and type(before_event) is not float:
+        raise Exception('ERROR: before_event is not int or float.')
+    else:
+        before_event = int(before_event)
+        
+    if type(after_event) is not int and type(after_event) is not float:
+        raise Exception('ERROR: after_event is not int or float.')
+    else:
+        after_event = int(after_event)
+    
+    # Combine data
+    data_events = [np.array([], dtype=np.int64).reshape(0,after_event+before_event,n_channles)] * n_events
+    for dt, event in zip(data, events):
+        n_data = dt.shape[0]
+        for iEv in range(event.shape[1]):
+            data_event = []
+            ev = find_values(event[:,iEv],1,'equal')
+            in_borders = np.logical_and(ev-before_event > 0, ev+after_event < n_data)
+            # if np.sum(in_borders == False)>0:
+            #     print('Trigger {}: {}/{} events out of border'.format(iEv,np.sum(in_borders == False),len(ev)))
+            ev = ev[in_borders]
+            for ev_sgl in ev:
+                data_event.append(dt[range(ev_sgl-before_event,ev_sgl+after_event),:])
+            data_events[iEv] = np.concatenate((data_events[iEv], np.array(data_event)), axis = 0)
+        
+    # Compute stats
+    data_mean = []
+    data_std = []
+    data_sem = []
+    data_snr = []
+    n_data = []
+    for data_event in data_events:
+        data_mean.append(np.mean(data_event, axis = 0))
+        data_std.append(np.std(data_event, axis = 0))
+        n_data.append(data_event.shape[0])
+        data_sem.append(np.std(data_event, axis = 0) / data_event.shape[0])
+        
+        if len(mean_norm) != 0 and len(std_norm) != 0:
+            data_snr.append(np.abs(np.mean(data_event, axis = 0)-np.tile(mean_norm,(after_event+before_event,1))) / \
+                            (np.std(data_event, axis = 0)+np.tile(std_norm,(after_event+before_event,1))) )
+    
+    return data_events, data_mean, data_std, n_data, data_sem, data_snr
+
+
+
+# =============================================================================
+# Epoching
+# =============================================================================
 def get_epochs(binary_array, Fs, verbose = False):
     
     if binary_array.ndim > 1:
@@ -48,72 +162,6 @@ def get_epochs(binary_array, Fs, verbose = False):
     return epochs
 
 
-def artefacts_removal(data, Fs, method = 'amplitude', n = 1, threshold = None):
-    '''
-    Parameters
-    ----------
-    data : np.ndarray
-        Signal array from which remove the artefacts
-    Fs : int
-        Data sampling frequency
-    method: str
-        Method to find the artefacts
-    n : int, optional
-        Minimum number of signal with artefact. The default is 1.
-    threshold : int, optional
-        Signal threshold for considering an artefact. The default is 300.
-
-    Returns
-    -------
-    good_idx : signals indexes with no artefacts
-
-    '''
-    
-    if type(data) is not np.ndarray:
-        raise Exception('ERROR: data in input must have a np.array format!')
-        
-    if data.ndim == 1:
-        sig_n = 1
-        data = np.expand_dims(data, axis=0)
-    else:
-        sig_n = min(data.shape)
-    
-    if n > sig_n:
-        print('Selected number of signal for artefacts removal ({0}) > the actual number of signals ({1}).\nSetting n = {1}'.format(n,sig_n))
-    
-    # Convert array to column array
-    if data.shape[0]<data.shape[1]:
-        data = data.T
-    
-    # Set junk offset
-    junk_offset = np.ceil(Fs/2).astype('int')
-    
-    if threshold == None:
-        threshold = np.percentile(data,95, axis = 0).mean()
-        print('Threshold not specified. Setting threshold = 95 percentile of the data...')
-    
-    if method == 'amplitude':
-        # Set an array for bad indexes
-        idx = np.logical_or(data < -threshold, data > threshold).astype('int')
-        # Bad indexes
-        bad_idx = (np.sum(idx, axis=1) >= n).astype('int')
-    else:
-        raise Exception('No other method for finding artefacts implemented!')
-    
-    # Remove junk period
-    junk_init = np.where((bad_idx[:-1]==0) & (bad_idx[1:]==1))[0]+1
-    junk_end = np.where((bad_idx[:-1]==1) & (bad_idx[1:]==0))[0]+1
-    for ji in junk_init:
-        bad_idx[ji-junk_offset:ji] = 1
-    
-    for je in junk_end:
-        bad_idx[je:je+junk_offset] = 1
-    
-    # # Return good indexes
-    # return np.logical_not(bad_idx).astype('int')
-    # Return good indexes
-    return bad_idx
-            
 def epochs_separation(data, good_epochs, Fs, print_figure = False):
     '''
     Parameters
@@ -201,6 +249,81 @@ def epochs_separation(data, good_epochs, Fs, print_figure = False):
     
     return epochs
     
+
+# =============================================================================
+# Artefactcs
+# =============================================================================
+def artefacts_removal(data, Fs, method = 'amplitude', n = 1, threshold = None):
+    '''
+    Parameters
+    ----------
+    data : np.ndarray
+        Signal array from which remove the artefacts
+    Fs : int
+        Data sampling frequency
+    method: str
+        Method to find the artefacts
+    n : int, optional
+        Minimum number of signal with artefact. The default is 1.
+    threshold : int, optional
+        Signal threshold for considering an artefact. The default is 300.
+
+    Returns
+    -------
+    good_idx : signals indexes with no artefacts
+
+    '''
+    
+    if type(data) is not np.ndarray:
+        raise Exception('ERROR: data in input must have a np.array format!')
+        
+    if data.ndim == 1:
+        sig_n = 1
+        data = np.expand_dims(data, axis=0)
+    else:
+        sig_n = min(data.shape)
+    
+    if n > sig_n:
+        print('Selected number of signal for artefacts removal ({0}) > the actual number of signals ({1}).\nSetting n = {1}'.format(n,sig_n))
+    
+    # Convert array to column array
+    if data.shape[0]<data.shape[1]:
+        data = data.T
+    
+    # Set junk offset
+    junk_offset = np.ceil(Fs/2).astype('int')
+    
+    if threshold == None:
+        threshold = np.percentile(data,95, axis = 0).mean()
+        print('Threshold not specified. Setting threshold = 95 percentile of the data...')
+    
+    if method == 'amplitude':
+        # Set an array for bad indexes
+        idx = np.logical_or(data < -threshold, data > threshold).astype('int')
+        # Bad indexes
+        bad_idx = (np.sum(idx, axis=1) >= n).astype('int')
+    else:
+        raise Exception('No other method for finding artefacts implemented!')
+    
+    # Remove junk period
+    junk_init = np.where((bad_idx[:-1]==0) & (bad_idx[1:]==1))[0]+1
+    junk_end = np.where((bad_idx[:-1]==1) & (bad_idx[1:]==0))[0]+1
+    for ji in junk_init:
+        bad_idx[ji-junk_offset:ji] = 1
+    
+    for je in junk_end:
+        bad_idx[je:je+junk_offset] = 1
+    
+    # # Return good indexes
+    # return np.logical_not(bad_idx).astype('int')
+    # Return good indexes
+    return bad_idx
+            
+
+# =============================================================================
+# Conversion
+# =============================================================================
+
 def convert_points_to_target_vector(points, vector):
     '''
     This function converts an array of points into a target vector.
@@ -280,6 +403,9 @@ def convert_time_samples(points, fs, convert_to = 'time'):
     
     return points
 
+# =============================================================================
+# Interpolation
+# =============================================================================
 def interpolate1D(array, length_new, kind = 'linear'):
     '''
     This function interpolates the given array to set a different lenght
@@ -303,7 +429,9 @@ def interpolate1D(array, length_new, kind = 'linear'):
     f = interpolate.interp1d(np.arange(len(array)), array, kind = kind, fill_value = 'extrapolate')
     return f(np.linspace(0,len(array),length_new))
     
-
+# =============================================================================
+# Main
+# =============================================================================
 if __name__ == '__main__':
     data = np.random.rand(100,10)
     data[12:21,1] = 10
