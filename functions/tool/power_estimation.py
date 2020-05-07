@@ -472,7 +472,7 @@ def moving_pmtm_trigger(data, events, win_size, win_step, freq_range, pre_event,
     post_event = int(post_event + win_size/2)
     
     # Check for events out of signal range
-    event2del = np.where(np.logical_or(events-int(pre_event) < 0, pre_event+int(post_event)>n_samples))[0]
+    event2del = np.where(np.logical_or(events-int(pre_event) < 0, events+int(post_event)>n_samples))[0]
     if len(event2del) != 0:
         events = np.delete(events, event2del)
     n_events = len(events)

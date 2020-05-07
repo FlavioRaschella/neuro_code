@@ -287,8 +287,7 @@ def artefacts_removal(data, Fs, method = 'amplitude', n = 1, threshold = None):
         print('Selected number of signal for artefacts removal ({0}) > the actual number of signals ({1}).\nSetting n = {1}'.format(n,sig_n))
     
     # Convert array to column array
-    if data.shape[0]<data.shape[1]:
-        data = data.T
+    data = transpose(data,'column')
     
     # Set junk offset
     junk_offset = np.ceil(Fs/2).astype('int')

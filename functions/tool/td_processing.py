@@ -8,29 +8,25 @@ Created on Mon Mar 23 11:29:47 2020
 
 # Numpy lib
 import numpy as np
-
 # Loading lib
 from loading_data import load_data_from_folder
-
-# Td utils lib
+# Td utils libs
 from td_utils import is_field, combine_fields, combine_dicts, td_subfield, extract_dicts
 from td_utils import remove_fields, remove_all_fields_but, add_params
-
 from utils import group_fields, convert_list_to_array, copy_dict, flatten_list, find_values, find_first, transpose
-
-# Processing libs
+# Import processing libs
 from processing import artefacts_removal, convert_points_to_target_vector, get_epochs, convert_time_samples
-
+# Import power estimation libs
 from power_estimation import moving_pmtm, moving_pmtm_trigger
-
+# Import filer libs
 from filters import sgolay_filter, downsample_signal, moving_average, envelope
 from filters import butter_bandpass_filtfilt as bpff
 from filters import butter_lowpass_filtfilt as lpff
 from filters import butter_highpass_filtfilt as hpff
-
-# Decoding utils
+# Import decoding utils
 from decoder_utils import extract_features
-
+# Import plotting libs
+import matplotlib.pyplot as plt
 
 # =============================================================================
 # Cleaning functions
@@ -60,11 +56,11 @@ def combine_epochs(td_1, td_2):
     for art, seg in zip(td_1, td_2):
         if len(art['epochs']) != len(seg['epochs']):
             raise Exception('ERROR: artefacts[epochs] and segments [epochs] have different length!')
-        td_epoch.append({'epochs': np.logical_and(np.array(art['epochs']), np.array(seg['epochs'])).astype('int')})
+        td_epoch.append({'epochs': np.logical_or(np.array(art['epochs']), np.array(seg['epochs'])).astype('int')})
     
     return td_epoch
 
-def segment_data(_td, td_epoch, fs, **kwargs):
+def segment_data(_td, _td_epoch, fs, **kwargs):
     '''
     This function segments the trial data in several blocks.
 
@@ -99,6 +95,7 @@ def segment_data(_td, td_epoch, fs, **kwargs):
     td_out = []
     
     td = copy_dict(_td)
+    td_epoch = copy_dict(_td_epoch)
     
     # check dict input variable
     if type(td) is dict:
@@ -725,8 +722,8 @@ def compute_multitaper_trigger(_td, **kwargs):
         If str, it can either be one key in td or the path in td where to find 
         the fs in td (e.g. params/data/data).
         
-    events : np.ndarray, shape (n_events,), optional
-        Events around which to compute the spectrogram. The events are in samples.
+    events : str
+        Name of the event field in td. The events must be in samples.
         
     win_size : int / float, optional
         Size of the sliding window for computing the pmtm. It is in seconds.
@@ -875,6 +872,9 @@ def compute_multitaper_trigger(_td, **kwargs):
         fields = [fields]
     if type(fields) is not list:
         raise Exception('ERROR: fields must be a list of strings!')
+    
+    if not is_field(td, events):
+        raise Exception('ERROR: event field not in td!')
         
     # Compute number of tapers
     tapers_n = (np.floor(2*NW)-1).astype('int')
@@ -895,9 +895,10 @@ def compute_multitaper_trigger(_td, **kwargs):
         # Collect data
         data_fields = [td_tmp[field] for field in fields]
         data = convert_list_to_array(data_fields, axis = 1)
+        events_smp = find_values(td_tmp[events],1)
         # Compute pmtm
         mt_spectrogram, sfreqs, stimes = moving_pmtm_trigger(data, 
-                        events, window_size_smp, window_step_smp, freq_range, 
+                        events_smp, window_size_smp, window_step_smp, freq_range, 
                         pre_event = pre_event, post_event = post_event,
                         kind = kind, norm = norm, NW = NW, Fs = fs, unit = unit, verbose=verbose)
         for iFld, field in enumerate(fields):
@@ -1573,6 +1574,11 @@ def load_pipeline(**kwargs):
         
         if 'fields' in target_load_dict.keys():
             remove_all_fields_but(td_target,target_load_dict['fields'],False,True)
+            # Take only positive values
+            for td_tmp in td_target:
+                for field in target_load_dict['fields']:
+                    td_tmp[field] = td_tmp[field][td_tmp[field]>0]
+            
             if 'convert_to' in target_load_dict.keys() and 'fs' in target_load_dict.keys():
                 for td_tmp in td_target:
                     for field in target_load_dict['fields']:
@@ -1616,6 +1622,8 @@ def cleaning_pipeline(td, **kwargs):
     combine_fields_dict = None
     remove_artefacts_dict = None
     add_segmentation_dict = None
+    return_epochs = False
+    td_epochs = []
     
     # Check input variables
     for key,value in kwargs.items():
@@ -1626,6 +1634,8 @@ def cleaning_pipeline(td, **kwargs):
             remove_artefacts_dict = value
         elif key == 'add_segmentation':
             add_segmentation_dict = value
+        elif key == 'return_epochs':
+            return_epochs = value
     
     # check dict input variable
     if type(td) is dict:
@@ -1641,17 +1651,34 @@ def cleaning_pipeline(td, **kwargs):
         td_artefacts = identify_artefacts(td, **remove_artefacts_dict)
         
     if add_segmentation_dict != None:
-        td_segment = {'epochs' : add_segmentation_dict['epochs']}
+        td_segment = add_segmentation_dict['td_segment']
     
     # Combine artefacts and segmentation
     if remove_artefacts_dict != None and add_segmentation_dict != None:
-        td = segment_data(td, combine_epochs(td_artefacts, td_segment), remove_artefacts_dict['fs'], invert_epoch = True)
+        td_epochs = combine_epochs(td_artefacts, td_segment)
+        if (is_field(remove_artefacts_dict, 'plot') and remove_artefacts_dict['plot'] == True) or\
+            (is_field(add_segmentation_dict, 'plot') and add_segmentation_dict['plot'] == True):
+                for td_artefacts_tmp, td_segment_tmp in zip(td_artefacts,td_segment):
+                    plt.figure(); plt.plot(td_artefacts_tmp['epochs'],'--b'); plt.plot(td_segment_tmp['epochs'],'--r');
+                    plt.title('Artefacts: blue; Turning: Red.')
+        td = segment_data(td, td_epochs, remove_artefacts_dict['fs'], invert_epoch = True)
     elif remove_artefacts_dict == None and add_segmentation_dict != None:
-        td = segment_data(td, td_segment, add_segmentation_dict['fs'], invert_epoch = True)
+        if (is_field(add_segmentation_dict, 'plot') and add_segmentation_dict['plot'] == True):
+            for td_tmp in td_segment:
+                plt.figure(); plt.plot(td_tmp['epochs']) 
+        td_epochs = td_segment
+        td = segment_data(td, td_epochs, add_segmentation_dict['fs'], invert_epoch = True)
     elif remove_artefacts_dict != None and add_segmentation_dict == None:
-        td = segment_data(td, td_artefacts, remove_artefacts_dict['fs'], invert_epoch = True)
+        if (is_field(remove_artefacts_dict, 'plot') and remove_artefacts_dict['plot'] == True):
+            for td_tmp in td_epochs:
+                plt.figure(); plt.plot(td_artefacts['epochs']) 
+        td_epochs = td_artefacts
+        td = segment_data(td, td_epochs, remove_artefacts_dict['fs'], invert_epoch = True)
     
-    return td
+    if return_epochs == True:
+        return td, td_epochs
+    else:
+        return td
 
 
 def preprocess_pipeline(td, **kwargs):

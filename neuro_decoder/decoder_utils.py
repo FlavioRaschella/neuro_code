@@ -40,19 +40,19 @@ def grid_search_cv_adapt_shift(estimator, data, events, shifts_for_events, cv_bl
     if events_shifted[0].ndim == 1:
         for event in events_shifted:
             event = np.expand_dims(event, axis = 1)
-    
+            
     # Remove event happening before the shift
     for iEv, event in enumerate(events_shifted):
         for ev in range(event.shape[1]):
-            ev_idx = np.where(find_values(event[:,ev],1,'equal')<shifts_for_events[ev])[0]
+            ev_idx = np.where(np.logical_or(find_values(event[:,ev],1,'equal')+shifts_for_events[ev]<0, find_values(event[:,ev],1,'equal')+shifts_for_events[ev]> event[:,ev].shape[0]))[0]
             if len(ev_idx) != 0:
                 print('event removed in block {}, target {}'.format(iEv,ev))
-                event[ev_idx] = 0
+                event[find_values(event[:,ev],1,'equal')[ev_idx],ev] = 0
     
     # Shift events
     for event in events_shifted:
         for ev in range(event.shape[1]):
-            event[:,ev] = np.roll(event[:,ev],-shifts_for_events[ev])
+            event[:,ev] = np.roll(event[:,ev],shifts_for_events[ev])
     
     # ========================================================================
     # Build the decoders
@@ -235,7 +235,7 @@ def build_decoder(estimator, data, events, events_shifted, cv_blocks, params_clf
     # Build the decoder
     if estimator == 'rLDA':
         clf = rLDA(regression_coeff = params_clf['regression_coeff'], 
-                   threshold_detect = params_clf['threshold_detect'],
+                   threshold_detect = 0.798,
                    refractory_period = params_clf['refractory_period'])
     else:
         raise Exception('ERROR: no other decoder implemented for the moment!')
@@ -268,8 +268,9 @@ def build_decoder(estimator, data, events, events_shifted, cv_blocks, params_clf
                     # Extract features for all the blocks
                     
                     # Actual number of no_event to use for each td
-                    no_event_dt = np.round(no_event/len(data)).astype('int')
-                    # no_event_dt = 100000
+                    # no_event_dt = np.round(no_event/len(data)).astype('int')
+                    no_event_dt = np.round(no_event).astype('int')
+                    
                     for dt, event in zip(data, events_shifted):
                         dt = transpose(dt,'column')
                         event = transpose(event,'column')
@@ -321,8 +322,10 @@ def build_decoder(estimator, data, events, events_shifted, cv_blocks, params_clf
                             events_test = []
                             events_pred = []
                             for iEv in range(n_events):
-                                events_test.append(np.where(y_test[:,iEv] == 1)[0])
-                                events_pred.append(np.where(y_pred[:,iEv] == 1)[0])
+                                events_test.append(np.where(y_test[:,iEv] == 1)[0] -np.min(template))
+                                events_pred.append(np.where(y_pred[:,iEv] == 1)[0] -np.min(template))
+                            # print('cut' + str(iCv_test))
+                            # print(events_pred)
                             
                             if plot:
                                 # Compute class probabilities
@@ -334,8 +337,8 @@ def build_decoder(estimator, data, events, events_shifted, cv_blocks, params_clf
                                 title = 'Train {}/{}; Test {}/{}\n'.format(iCv_train+1, n_cv,iCv_test+1, len(test_blocks))
                                 for iEv, (class_prob, ev_test, ev_pred, col) in enumerate(zip(classes_prob[:,1:].T, events_test,events_pred,colors)):
                                     plt.plot(class_prob, color = col)
-                                    plt.vlines(ev_pred,0,1,color = col, linestyle = '--')
-                                    plt.scatter(ev_test,1.1*np.ones(ev_test.shape), marker = 'v',color = col)
+                                    plt.vlines(ev_pred+np.min(template),0,1,color = col, linestyle = '--')
+                                    plt.scatter(ev_test+np.min(template),1.1*np.ones(ev_test.shape), marker = 'v',color = col)
                                     title += 'Event {}, col: {};'.format(iEv+1,col)
                                 plt.title(title)
                             
@@ -350,7 +353,7 @@ def build_decoder(estimator, data, events, events_shifted, cv_blocks, params_clf
                     params = combine_dicts((params_clf, params_model), inplace = False)
                     # Save model
                     models.append({'clf': clf, 'params': params, 'score': mutual_information, 'conf_matrix': conf_matrix})
-                        
+    
     return models
 
 
@@ -440,7 +443,7 @@ def build_decoder_freq_band(estimator, data, events, events_shifted, cv_blocks, 
                         for cv_blk in test_blocks:
                             n_data = data[cv_blk].shape[0]
                             X_test = get_features_data(data[cv_blk], template)
-                            y_test = events[cv_blk]
+                            y_test = events[cv_blk][-np.min(template):,:]
                             
                             # Predict
                             classes = clf.predict(X_test, probs = False)
@@ -449,14 +452,14 @@ def build_decoder_freq_band(estimator, data, events, events_shifted, cv_blocks, 
                             # Set predictive class            
                             y_pred = np.zeros((n_data,n_events))
                             for iEv in range(n_events):
-                                y_pred[:,iEv][np.where(classes == iEv+1)[0]-np.min(template)] = 1
+                                y_pred[:,iEv][np.where(classes == iEv+1)[0]] = 1
                                 
                             # Compute confusion matrix for mutual information
                             events_test = []
                             events_pred = []
                             for iEv in range(n_events):
-                                events_test.append(np.where(y_test[:,iEv] == 1)[0])
-                                events_pred.append(np.where(y_pred[:,iEv] == 1)[0])
+                                events_test.append(np.where(y_test[:,iEv] == 1)[0] -np.min(template))
+                                events_pred.append(np.where(y_pred[:,iEv] == 1)[0] -np.min(template))
                             
                             conf_matrix += compute_hetero_kardinality(events_test,events_pred,n_data,win_tol)
                         
@@ -790,9 +793,9 @@ def compute_mutual_information_prior_norm(all_kardinality):
         
     norm_kardinality = joint_prob = all_kardinality/sum_kardinality
     
-    prior = np.nansum(norm_kardinality,posterior_dim)
-    posterior = np.nansum(norm_kardinality,prior_dim)    
-    mutInfo = joint_prob * np.log2( joint_prob / (np.moveaxis(np.tile(posterior,(n_classes,1,1)),1,0)*np.moveaxis(np.tile(prior,(n_classes,1,1)),0,-1)) )
+    prior = np.nansum(norm_kardinality,prior_dim)
+    posterior = np.nansum(norm_kardinality,posterior_dim)    
+    mutInfo = joint_prob * np.log2( joint_prob / (np.moveaxis(np.tile(prior,(n_classes,1,1)),1,0)*np.moveaxis(np.tile(posterior,(n_classes,1,1)),0,-1)) )
     mutInfo = np.nansum(np.nansum(mutInfo,axis = -1),axis = -1)
     
     prior_entropy = prior*np.log2(prior)
@@ -1064,7 +1067,7 @@ def check_data_params(params):
 # =============================================================================
 # Plotting
 # =============================================================================
-def plot_MI_2d_tol(models, Xval, Yval, tol, kind, return_matrix=False):
+def plot_MI_2d_tol(models, Xval, Yval, tol, kind, return_matrix = False, xticks = [], yticks = []):
     '''
     This function computes and plots the MI matrix for different shifts applied
     to the events. This function is limited to one decoder type with multiple 
@@ -1140,7 +1143,7 @@ def plot_MI_2d_tol(models, Xval, Yval, tol, kind, return_matrix=False):
                     if kind == 'shifts':
                         if model['params'][kind] == [xval, yval]:
                             tol_of_interest = np.where(np.abs((model['params']['win_tol'] - t)) < 0.1)[0]
-                            mi_2d[len(Xval)-iX-1,iY,iT] = model['score'][tol_of_interest]
+                            mi_2d[iX,iY,iT] = model['score'][tol_of_interest]
                             shifts_found = True
                             break
                     elif kind == 'band':
@@ -1168,14 +1171,22 @@ def plot_MI_2d_tol(models, Xval, Yval, tol, kind, return_matrix=False):
         fig, ax = plt.subplots(1,1)
         cs = ax.imshow(mi_2d[:,:,iT], interpolation=None, extent=extent, aspect='auto', cmap = parula)
         
-        plt.xticks(np.arange(centers[0], centers[1]+dx, dx))
-        plt.yticks(np.arange(centers[3], centers[2]+dy, dy))
         if kind == 'band':
-            plt.xlabel('Low band')
-            plt.ylabel('High band')
+            plt.xlabel('Frequency band start [Hz]')
+            plt.ylabel('Frequency band stop [Hz]')
+            if len(xticks) == 0:
+                plt.xticks(np.arange(centers[0], centers[1]+dx, dx))
+            else:
+                plt.xticks(np.arange(centers[0], centers[1]+dx, dx), labels = np.around(xticks, decimals=2), rotation=90)
+            if len(yticks) == 0:
+                plt.yticks(np.arange(centers[3], centers[2]+dy, dy),labels = np.arange(centers[2], centers[3]-dy, -dy).astype('int'))
+            else:
+                plt.yticks(np.arange(centers[3], centers[2]+dy, dy),labels = np.around(yticks, decimals=2), rotation=0)
         elif kind == 'shifts':
-            plt.xlabel('1st shift')
-            plt.ylabel('2nd shift')
+            plt.xlabel('2nd shift')
+            plt.ylabel('1st shift')
+            plt.xticks(np.arange(centers[0], centers[1]+dx, dx))
+            plt.yticks(np.arange(centers[3], centers[2]+dy, dy))
         
         plt.title('Decoder MI for tolerance window +-{} ms'.format(int(t)))
         
