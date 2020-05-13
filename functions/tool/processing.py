@@ -89,7 +89,7 @@ def get_trigger_data(data, events, before_event, after_event, mean_norm = [], st
     
     # Combine data
     data_events = [np.array([], dtype=np.int64).reshape(0,after_event+before_event,n_channles)] * n_events
-    for dt, event in zip(data, events):
+    for iDt, (dt, event) in enumerate(zip(data, events)):
         n_data = dt.shape[0]
         for iEv in range(event.shape[1]):
             data_event = []
@@ -98,6 +98,8 @@ def get_trigger_data(data, events, before_event, after_event, mean_norm = [], st
             # if np.sum(in_borders == False)>0:
             #     print('Trigger {}: {}/{} events out of border'.format(iEv,np.sum(in_borders == False),len(ev)))
             ev = ev[in_borders]
+            if (ev == False).all():
+                continue
             for ev_sgl in ev:
                 data_event.append(dt[range(ev_sgl-before_event,ev_sgl+after_event),:])
             data_events[iEv] = np.concatenate((data_events[iEv], np.array(data_event)), axis = 0)

@@ -692,7 +692,15 @@ def compute_multitaper(_td, **kwargs):
             for event in target_fields:
                 target_new = np.zeros(stimes.shape)
                 for ev in np.unique(td_tmp[event])[1:]:
-                    target_new += np.histogram(np.where(td_tmp[event] == ev), bins = stimes.shape[0], range = (0, len(td_tmp[event])))[0]
+                    bins = np.arange(int(window_size_smp/2),len(td_tmp[event])-int(window_size_smp/2)+1,window_step_smp)
+                    # bins = np.arange(int(window_size_smp/2),len(td_tmp[event])-int(window_size_smp/2),window_step_smp)
+                    target_new_tmp = np.histogram(np.where(td_tmp[event] == ev), bins = bins)[0]
+                    if (find_values(td_tmp[event]) == len(td_tmp[event])-int(window_size_smp/2)+window_step_smp).any():
+                        target_new_tmp = np.append(target_new_tmp,1)
+                    else:
+                        target_new_tmp = np.append(target_new_tmp,0)
+                    
+                    target_new += target_new_tmp
                 if (target_new > np.unique(td_tmp[event])[-1]).any():
                     raise Exception('ERROR: Multiple classes are falling in the mutitaping binning!')
                 td_tmp[event] = target_new
@@ -701,7 +709,6 @@ def compute_multitaper(_td, **kwargs):
         td = td[0]
     
     return td
-
 
 def compute_multitaper_trigger(_td, **kwargs):
     '''

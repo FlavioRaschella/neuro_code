@@ -23,47 +23,45 @@ from stats import boostrap, confidence_interval_sample
 # =============================================================================
 # Grid search decoder
 # =============================================================================
-def grid_search_cv_adapt_shift(estimator, data, events, shifts_for_events, cv_blocks, win_tol, params_clf, params_data):
-    
-    # Check decoder parameters
-    if not check_decoder_params(estimator, params_clf, convert = True):
-        raise Exception('ERROR in check_decoder_params!')
-    
-    # ========================================================================
-    # Shift the events
-    if events[0].ndim != len(shifts_for_events):
-        raise Exception('ERROR: events dimension {} is different from the number of shifts_for_events {}'.format(events[0].ndim, len(shifts_for_events)))
-
-    events_shifted = copy.deepcopy(events)
-    
-    # Adjust dimension to allow for loop later
-    if events_shifted[0].ndim == 1:
-        for event in events_shifted:
-            event = np.expand_dims(event, axis = 1)
-            
-    # Remove event happening before the shift
-    for iEv, event in enumerate(events_shifted):
-        for ev in range(event.shape[1]):
-            ev_idx = np.where(np.logical_or(find_values(event[:,ev],1,'equal')+shifts_for_events[ev]<0, find_values(event[:,ev],1,'equal')+shifts_for_events[ev]> event[:,ev].shape[0]))[0]
-            if len(ev_idx) != 0:
-                print('event removed in block {}, target {}'.format(iEv,ev))
-                event[find_values(event[:,ev],1,'equal')[ev_idx],ev] = 0
-    
-    # Shift events
-    for event in events_shifted:
-        for ev in range(event.shape[1]):
-            event[:,ev] = np.roll(event[:,ev],shifts_for_events[ev])
-    
-    # ========================================================================
-    # Build the decoders
-    raise Exception('ERROR: This function is a work in progress! The idea is \
-                    to automatically adapt the shifts. Hopefully soon ready! \
-                    Hopefully...')
-    pass
-
-
 def grid_search_cv_band(estimator, data, events, events_shifted, cv_blocks, win_tol, params_clf, params_data, band_min = 0, band_max = 0, zscore = False):
-    
+    '''
+    This function builds decoders based on the params_clf grid, scanning over 
+    all the possible frequency band combinations.
+
+    Parameters
+    ----------
+    estimator : str
+        Name of the estimator to build.
+    data : list of np.ndarray, len (n_data) [shape (n_samples, n_channels),...]
+        List of the datasets used for extracting the features.
+    events : list of np.ndarray, len (n_data) [shape (n_samples, n_events),...]
+        List of the events array containing the position of the events.
+    events_shifted : list of np.ndarray, len (n_data) [shape (n_samples, n_events),...]
+        Same as events, but shifted in time.
+    cv_blocks : list of np.ndarray, len (n_cv) [shape (n_blocks,),...]
+        List of the blocks of data to use for training and testing.
+    win_tol : int/float / list of int/float
+        Size of the window around the events.
+    params_clf : dict
+        Dictionary containing the parameters to use for the classifier.
+    params_data : dict
+        Dictionary containing the parameters to use for the data.
+    band_min : int, optional
+        Lower band to start the scanning. The default value is 0.
+    band_max : int
+        Higher band to stop the scanning. The default value is equal to the 
+        max band of the data.
+    zscore : bool, optional
+        Set whether zscore the data. The default is False.
+
+    Returns
+    -------
+    models : list
+        All the models built based on the input parameters.
+    best_model : dict
+        The model with the highest score.
+
+    '''
     # Check decoder parameters
     if not check_decoder_params(estimator, params_clf, convert = True):
         raise Exception('ERROR: in check_decoder_params!')
@@ -154,7 +152,38 @@ def grid_search_cv_band(estimator, data, events, events_shifted, cv_blocks, win_
     
 
 def grid_search_cv(estimator, data, events, events_shifted, cv_blocks, win_tol, params_clf, params_data, zscore = False):
-    
+    '''
+    This function builds decoders based on the params_clf grid.
+
+    Parameters
+    ----------
+    estimator : str
+        Name of the estimator to build.
+    data : list of np.ndarray, len (n_data) [shape (n_samples, n_channels),...]
+        List of the datasets used for extracting the features.
+    events : list of np.ndarray, len (n_data) [shape (n_samples, n_events),...]
+        List of the events array containing the position of the events.
+    events_shifted : list of np.ndarray, len (n_data) [shape (n_samples, n_events),...]
+        Same as events, but shifted in time.
+    cv_blocks : list of np.ndarray, len (n_cv) [shape (n_blocks,),...]
+        List of the blocks of data to use for training and testing.
+    win_tol : int/float / list of int/float
+        Size of the window around the events.
+    params_clf : dict
+        Dictionary containing the parameters to use for the classifier.
+    params_data : dict
+        Dictionary containing the parameters to use for the data.
+    zscore : bool, optional
+        Set whether zscore the data. The default is False.
+
+    Returns
+    -------
+    models : list
+        All the models built based on the input parameters.
+    best_model : dict
+        The model with the highest score.
+
+    '''
     # Check decoder parameters
     if not check_decoder_params(estimator, params_clf, convert = True):
         raise Exception('ERROR: in check_decoder_params!')
@@ -213,7 +242,37 @@ def grid_search_cv(estimator, data, events, events_shifted, cv_blocks, win_tol, 
 # Build decoder
 # =============================================================================
 def build_decoder(estimator, data, events, events_shifted, cv_blocks, params_clf, params_data, win_tol, plot = False):
-    
+    '''
+    This function build an estimator depending on the input paramteres. Only 
+    one decoder is built but it is applied to the dataset described by params_data.
+
+    Parameters
+    ----------
+    estimator : str
+        Name of the estimator to build.
+    data : list of np.ndarray, len (n_data) [shape (n_samples, n_channels),...]
+        List of the datasets used for extracting the features.
+    events : list of np.ndarray, len (n_data) [shape (n_samples, n_events),...]
+        List of the events array containing the position of the events.
+    events_shifted : list of np.ndarray, len (n_data) [shape (n_samples, n_events),...]
+        Same as events, but shifted in time.
+    cv_blocks : list of np.ndarray, len (n_cv) [shape (n_blocks,),...]
+        List of the blocks of data to use for training and testing.
+    params_clf : dict
+        Dictionary containing the parameters to use for the classifier.
+    params_data : dict
+        Dictionary containing the parameters to use for the data.
+    win_tol : int/float / list of int/float
+        Size of the window around the events.
+    plot : bool, optional
+        Set whether plotting or not the classes probability. The default is False.
+
+    Returns
+    -------
+    models : list
+        All the models built based on the input parameters.
+
+    '''
     # Check decoder parameters
     if not check_decoder_params(estimator, params_clf, convert = False):
         raise Exception('ERROR in check_decoder_params!')
@@ -235,7 +294,7 @@ def build_decoder(estimator, data, events, events_shifted, cv_blocks, params_clf
     # Build the decoder
     if estimator == 'rLDA':
         clf = rLDA(regression_coeff = params_clf['regression_coeff'], 
-                   threshold_detect = 0.798,
+                   threshold_detect = params_clf['threshold_detect'],
                    refractory_period = params_clf['refractory_period'])
     else:
         raise Exception('ERROR: no other decoder implemented for the moment!')
@@ -358,7 +417,35 @@ def build_decoder(estimator, data, events, events_shifted, cv_blocks, params_clf
 
 
 def build_decoder_freq_band(estimator, data, events, events_shifted, cv_blocks, params_clf, params_data, win_tol):
-    
+    '''
+    This function build a series of estimators screening all the possible 
+    frequency band combinations for the input data.
+
+    Parameters
+    ----------
+    estimator : str
+        Name of the estimator to build.
+    data : list of np.ndarray, len (n_data) [shape (n_samples, n_channels, n_frequencies),...]
+        List of the datasets used for extracting the features.
+    events : list of np.ndarray, len (n_data) [shape (n_samples, n_events),...]
+        List of the events array containing the position of the events.
+    events_shifted : list of np.ndarray, len (n_data) [shape (n_samples, n_events),...]
+        Same as events, but shifted in time.
+    cv_blocks : list of np.ndarray, len (n_cv) [shape (n_blocks,),...]
+        List of the blocks of data to use for training and testing.
+    params_clf : dict
+        Dictionary containing the parameters to use for the classifier.
+    params_data : dict
+        Dictionary containing the parameters to use for the data.
+    win_tol : int/float / list of int/float
+        Size of the window around the events.
+
+    Returns
+    -------
+    models : list
+        All the models built based on the input parameters.
+
+    '''
     # Check decoder parameters
     if not check_decoder_params(estimator, params_clf, convert = False):
         raise Exception('ERROR in check_decoder_params!')
@@ -480,6 +567,22 @@ def build_decoder_freq_band(estimator, data, events, events_shifted, cv_blocks, 
 # Feature extraction
 # =============================================================================
 def get_features_data(data, template):
+    '''
+    This function extracts the features from a given dataset at all samples.
+
+    Parameters
+    ----------
+    data : np.array, shape (n_samples, n_channels)
+        Dataset of the signals from which we need to extract the features.
+    template : np.ndarray, shape (n_distances)
+        Array containing the distance in samples between time events.
+
+    Returns
+    -------
+    events_features : np.array, shape (n_samples, n_channels*n_distances)
+        Array of features.
+        
+    '''
     events_features = np.empty( (data.shape[0]+np.min(template), data.shape[1]*len(template)) )
     events_features[:] = np.nan
     
@@ -490,6 +593,26 @@ def get_features_data(data, template):
 
 
 def get_features(data, events, template):
+    '''
+    This function extracts the features from a given dataset and given samples.
+
+    Parameters
+    ----------
+    data : np.array, shape (n_samples, n_channels)
+        Dataset of the signals from which we need to extract the features.
+    events : np.array, shape (n_events)
+        Array containing the position of the events as samples.
+    template : np.ndarray, shape (n_distances)
+        Array containing the distance in samples between time events.
+
+    Returns
+    -------
+    events_features : np.array, shape (n_events, n_channels*n_distances)
+        Array of features.
+    events_features_zeros : np.array, shape (n_events, n_channels*n_distances)
+        Array of labels. Remember that 0 is no_event class.
+        
+    '''
     events_features = np.empty( (len(events), data.shape[1]*len(template)) )
     events_features[:] = np.nan
     
@@ -505,22 +628,23 @@ def get_features(data, events, template):
 
 def extract_features(data, event_data, dead_win, no_event_n, features_n, template, order = 'sequential'):
     '''
-    This function extracts the features from a dataset.
+    This function extracts the features from a dataset taking into accout the 
+    good and bad samples to collect.
 
     Parameters
     ----------
-    data : np.array / list of np.array
+    data : np.array / list of np.array, shape (n_samples, n_channels
         Dataset of the signals from which we need to extract the features.
         Every element in the list can be either 1d or 2d.
-    event_data : np.array
-        Array (nxk) where k are the different events signals and n = data.shape[0].
+    event_data : np.array, shape (n_samples, n_events)
+        Array containing the events as ones.
     dead_win : int
         Length of the dead window around the event. dead_win is in samples. 
     no_event_n : int
         Length of the no_events in the current dataset. neg_train is in samples.
     features_n : int
         Number of features to be retreived for each event.
-    template : np.ndarray
+    template : np.ndarray, shape (n_distances)
         Array containing the distance in samples between time events.
     order : str, optional
         Set the order for the feature to be extracted. It can either be
@@ -605,14 +729,14 @@ def extract_features(data, event_data, dead_win, no_event_n, features_n, templat
 def compute_Hetero_Hist_Edges(triggers,vectLength,tolWin):
     '''
     This function cuts intervals around each trigger (histEdges) depending on 
-    the tolerance window
+    the tolerance window.
 
     Parameters
     ----------
     triggers : list of np.ndarray, len(n_classes),  [shape(n_events,),...]
         List of events for each class.
     vectLength : int / float
-        DESCRIPTION.
+        Length of the signal from which the features are retrived.
     tolWin : int/float / list of int/float
         Size of the window around the events.
 
@@ -692,27 +816,21 @@ def compute_Hetero_Hist_Edges(triggers,vectLength,tolWin):
 
 def compute_hetero_kardinality(triggers,triggers_dec,vectLength,tolWin):
     '''
-    This function computs the confusion matrix kardinality for each tolerance window
+    This function computs the confusion matrix (kardinality) for each tolerance window.
 
     Parameters
     ----------
-    triggers : TYPE
-        DESCRIPTION.
-    triggers_dec : TYPE
-        DESCRIPTION.
-    tolWin : TYPE
-        DESCRIPTION.
-    histEdges : TYPE
-        DESCRIPTION.
-    hitBins : TYPE
-        DESCRIPTION.
-    negLen : TYPE
-        DESCRIPTION.
+    triggers : list of np.ndarray, len(n_classes),  [shape(n_events,),...]
+        Ground truth events.
+    triggers_dec : list of np.ndarray, len(n_classes),  [shape(n_events,),...]
+        Decoded events.
+    tolWin : np.ndarray, shape (n_tol,)
+        Tolerance windows for considering an event as detected.
 
     Returns
     -------
-    kardinality : TYPE
-        DESCRIPTION.
+    kardinality : np.ndarray, shape (n_tol,n_classes,n_classes)
+        Confusion matrix.
 
     '''
     
@@ -763,35 +881,36 @@ def compute_hetero_kardinality(triggers,triggers_dec,vectLength,tolWin):
     return kardinality
 
 
-def compute_mutual_information_prior_norm(all_kardinality):
+def compute_mutual_information_prior_norm(confusion_matrix):
     '''
-    
+    This function computes the mutual information for a give confusion matrix.
 
     Parameters
     ----------
-    all_kardinality : np.ndarray, shape (N,n_classes,n_classes)
-        DESCRIPTION.
+    confusion_matrix : 2d/3d np.ndarray, shape (n_classes,n_classes) or shape (n_tol,n_classes,n_classes)
+        The confusion matrix for a given decoder. It can have 3 dimensions 
+        when stacking more than one confusion_matrix.
         
     Returns
     -------
-    grpMutInfo : TYPE
-        DESCRIPTION.
+    grpMutInfo : np.ndarray, shape (1) or shape(n_tol)
+        Mutual information for each confusion_matrix.
 
     '''
-    mat_dim = all_kardinality.ndim
-    n_classes = all_kardinality.shape[-1]
-    if all_kardinality.shape[-1] != all_kardinality.shape[-2]:
+    mat_dim = confusion_matrix.ndim
+    n_classes = confusion_matrix.shape[-1]
+    if confusion_matrix.shape[-1] != confusion_matrix.shape[-2]:
         raise ValueError('ERROR: kardinality matrix is not squared!')
         
     prior_dim = mat_dim-2
     posterior_dim = mat_dim-1
     
     if mat_dim == 2:
-        sum_kardinality = np.tile(np.nansum(np.nansum(all_kardinality,axis = -1),axis = -1),(n_classes,n_classes))
+        sum_kardinality = np.tile(np.nansum(np.nansum(confusion_matrix,axis = -1),axis = -1),(n_classes,n_classes))
     elif mat_dim == 3:
-        sum_kardinality = np.moveaxis(np.tile(np.nansum(np.nansum(all_kardinality,axis = -1),axis = -1),(n_classes,n_classes,1)), -1, 0)
+        sum_kardinality = np.moveaxis(np.tile(np.nansum(np.nansum(confusion_matrix,axis = -1),axis = -1),(n_classes,n_classes,1)), -1, 0)
         
-    norm_kardinality = joint_prob = all_kardinality/sum_kardinality
+    norm_kardinality = joint_prob = confusion_matrix/sum_kardinality
     
     prior = np.nansum(norm_kardinality,prior_dim)
     posterior = np.nansum(norm_kardinality,posterior_dim)    
@@ -817,6 +936,42 @@ def compute_mutual_information_prior_norm(all_kardinality):
 
 
 # =============================================================================
+# Temporal accuracy
+# =============================================================================
+
+def temporal_accuracy(confusion_matrix, consider_last = True):
+    '''
+    This function computes the temporal accuracy for a give confusion matrix.
+
+    Parameters
+    ----------
+    confusion_matrix : np.ndarray, shape (n_classes, n_classes)
+        The confusion matrix for a given decoder.
+        
+    consider_last : bool, optional
+        This flag decide whether taking the last class on the diagonal of the 
+        confusion matrix. The default is True.
+
+    Returns
+    -------
+    temporal_accuracy : float
+        Percentage of events correctly classified in the defined tollerance 
+        window.
+        
+    '''
+    
+    n_classes = confusion_matrix.shape[0]
+    if not consider_last:
+        n_classes -= 1
+    
+    temp_acc_class = []
+    for iCls in range(n_classes):
+        temp_acc_class.append(confusion_matrix[iCls,iCls]/np.sum(confusion_matrix[:,iCls]))
+    
+    return np.mean(temp_acc_class)
+    
+
+# =============================================================================
 # Data separation
 # =============================================================================
 def prepare_cv_uniform(data, events, deviation = 0.2, cv_division = 4, blocks_start = [], blocks_stop = []):
@@ -826,22 +981,44 @@ def prepare_cv_uniform(data, events, deviation = 0.2, cv_division = 4, blocks_st
 
     Parameters
     ----------
-    data : list of np.ndarray, shape(n_samples, n_channels, n_frequencies)
-        DESCRIPTION.
+    data : list of 2d/3d np.ndarray, shape(n_samples, n_channels) or shape(n_samples, n_channels, n_frequencies)
+        It is a list of the 2d/3d data.
+    
     events : list of np.ndarray, shape(n_samples, n_events)
-        DESCRIPTION.
-    deviation : TYPE
-        DESCRIPTION.
-    cv_division : TYPE
-        DESCRIPTION.
-    blocks_start : TYPE
-        DESCRIPTION.
-    blocks_stop : TYPE
-        DESCRIPTION.
+        It is a list of 2d/3d np.ndarray.
+    
+    deviation : float, optional
+        Percentage of samples difference of the cv group from the targeted 
+        group length (total n_samples / cv_division). The default is 0.2.
+    
+    cv_division : int, optional
+        Number of groups for crossvalidation. The default is 4.
+        
+    blocks_start : list of int, optional
+        Different sample start for a certain block. The default is empty.
+   
+    blocks_stop : list of int, optional
+        Different sample stop for a certain block. The default is empty.
 
     Returns
     -------
-    None.
+    cv_blocks : list of np.ndarray, len (cv_division)
+        List containing the number of the data separation for training and testing.
+        
+    data : list of np.ndarray 
+        List of new data.
+    
+    events : list of np.ndarray
+        List of new events.
+        
+    n_blocks : int
+        Length of the data list
+        
+    blocks_start :
+        Start sample for each block.
+        
+    blocks_stop : 
+        Stop sample for each block.
 
     '''
     
@@ -857,6 +1034,16 @@ def prepare_cv_uniform(data, events, deviation = 0.2, cv_division = 4, blocks_st
         
     if type(events) is not list:
         raise Exception('ERROR: events must be a list!')
+    
+    if type(deviation) is not float:
+        raise Exception('ERROR: deviation must be a float!')
+    if deviation < 0 or deviation > 1:
+        raise Exception('ERROR: deviation is < 0 or > 1! You inputed "{}"'.format(deviation))
+    
+    if type(cv_division) is not int:
+        raise Exception('ERROR: cv_division must be an int!')
+    if cv_division < 0:
+        raise Exception('ERROR: cv_division is < 0! You inputed "{}"'.format(cv_division))
     
     # Prepare data
     is_parted = False
@@ -978,19 +1165,37 @@ def prepare_cv_uniform(data, events, deviation = 0.2, cv_division = 4, blocks_st
 # =============================================================================
 # Stats
 # =============================================================================
-def bootstrap_MInorm_simple(conf_matrix, no_straps = 10000):
-    
-    if conf_matrix.ndim != 2:
-        raise Exception('ERROR: conf_matrix dimension > 2!')
+def bootstrap_MInorm_simple(confusion_matrix, no_straps = 10000):
+    '''
+    This function bootstrap the mutual information distribution to compute the 
+    boostrapped mean, std, confidence interval, and 95 percentile.
+
+    Parameters
+    ----------
+    confusion_matrix : np.ndarray, shape (n_classes, n_classes)
+        Confusion matrix computed using a decoder.
+    no_straps : int, optional
+        Number of samples. The default is 10000.
+    consider_last : bool, optional
+        Consider or not the last class. The default is False.
+
+    Returns
+    -------
+    boot : dict
+        Dictionary containing all the boostrapped information.
+
+    '''
+    if confusion_matrix.ndim != 2:
+        raise Exception('ERROR: confusion_matrix dimension > 2!')
     
     boot = dict()
     
-    n_data = np.sum(conf_matrix)
+    n_data = np.sum(confusion_matrix)
     boot_n_freedom = n_data - 1
-    boot_data = boostrap(conf_matrix, no_straps)
+    boot_data = boostrap(confusion_matrix, no_straps)
     
     boot_mi = compute_mutual_information_prior_norm(np.moveaxis(boot_data,-1,0))
-    real_mi = float(compute_mutual_information_prior_norm(conf_matrix))
+    real_mi = float(compute_mutual_information_prior_norm(confusion_matrix))
     
     boot_std = np.std(boot_mi)
     boot_mean, boot_95conf_low, boot_95conf_high = confidence_interval_sample(boot_mi, confidence=0.95)
@@ -1009,11 +1214,85 @@ def bootstrap_MInorm_simple(conf_matrix, no_straps = 10000):
 
     return boot
 
+def bootstrap_temporal_accuracy_simple(confusion_matrix, no_straps = 10000, consider_last = False):
+    '''
+    This function bootstrap the temporal accuracy distribution to compute the 
+    boostrapped mean, std, confidence interval, and 95 percentile.
+
+    Parameters
+    ----------
+    confusion_matrix : np.ndarray, shape (n_classes, n_classes)
+        Confusion matrix computed using a decoder.
+    no_straps : int, optional
+        Number of samples. The default is 10000.
+    consider_last : bool, optional
+        Consider or not the last class. The default is False.
+
+    Returns
+    -------
+    boot : dict
+        Dictionary containing all the boostrapped information.
+
+    '''
+    if confusion_matrix.ndim != 2:
+        raise Exception('ERROR: confusion_matrix dimension > 2!')
+    
+    n_classes = confusion_matrix.shape[0]
+    if not consider_last:
+        confusion_matrix_boot = confusion_matrix[:,:-1].T
+        n_classes -= 1
+    else:
+        confusion_matrix_boot = confusion_matrix
+    
+    boot = dict()
+    
+    # Bootstrap data
+    n_data = np.sum(confusion_matrix_boot)
+    boot_n_freedom = n_data - 1
+    boot_data = boostrap(confusion_matrix_boot, no_straps)
+    
+    # Compute temporal accuracy
+    boot_ta_tmp = []
+    for iCls in range(n_classes):
+        boot_ta_tmp.append(boot_data[iCls,iCls,:]/np.sum(boot_data[iCls,:,:],axis = 0))
+    boot_ta = np.mean(np.array(boot_ta_tmp),axis = 0)
+    real_ta = temporal_accuracy(confusion_matrix, consider_last = consider_last)
+    
+    boot_std = np.std(boot_ta)
+    boot_mean, boot_95conf_low, boot_95conf_high = confidence_interval_sample(boot_ta, confidence=0.95)
+    
+    boot_95percentile = np.percentile(boot_ta,[2.5, 97.5]) - boot_mean + real_ta
+
+    # Save in boot dict
+    boot['n_freedom'] = boot_n_freedom
+    boot['boot_ta'] = boot_ta
+    boot['real_ta'] = real_ta
+    boot['boot_mean'] = boot_mean
+    boot['boot_std'] = boot_std
+    boot['boot_95conf_low'] = boot_95conf_low
+    boot['boot_95conf_high'] = boot_95conf_high
+    boot['boot_95percentile'] = boot_95percentile
+
+    return boot
+
 # =============================================================================
 # Parameters configuration
 # =============================================================================
 def check_decoder_params(estimator, params, convert = True):
-    
+    '''
+    This function checks the input parameters for building a decoder.
+
+    Parameters
+    ----------
+    params : dict
+        Dictionary containing the parameters for building a decoder.
+
+    Returns
+    -------
+    bool
+        Returns True is the parameters are correct.
+
+    '''
     # Necessary parameters in params
     if estimator == 'rLDA':
         params_fields = ['regression_coeff','threshold_detect','refractory_period']
@@ -1038,7 +1317,20 @@ def check_decoder_params(estimator, params, convert = True):
     return True
 
 def check_data_params(params):
-    
+    '''
+    This function checks the input parameters for processing the data.
+
+    Parameters
+    ----------
+    params : dict
+        Dictionary containing the parameters for processing the data.
+
+    Returns
+    -------
+    bool
+        Returns True is the parameters are correct.
+
+    '''
     # Necessary parameters in params
     params_fields = ['time_n','feature_win','dead_win','no_event','shifts']
     

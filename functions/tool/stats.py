@@ -100,7 +100,8 @@ def boostrap(data, n_straps = 10000):
             # boot_count.append(np.histogram(np.digitize(boot_idx[:,iStr], bins = bins, right = False)-1, bins = len(bins), range = (0,len(bins)))[0])
         boot_count = np.array(boot_count).T
         
-        boot_data = np.moveaxis(np.reshape(boot_count,(data.shape[0], data.shape[0], n_straps)),0,1)
+        # boot_data = np.moveaxis(np.reshape(boot_count,(data.shape[0], data.shape[0], n_straps)),0,1)
+        boot_data = np.moveaxis(np.reshape(boot_count,(data.shape[1], data.shape[0], n_straps)),0,1)
     
     return boot_data
     
