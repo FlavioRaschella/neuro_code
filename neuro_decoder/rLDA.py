@@ -94,7 +94,7 @@ class rLDA(BaseEstimator):
     
     Parameters
     ----------
-    regression_coeff : float, optional
+    regularization_coeff : float, optional
         Regression coefficient. The default is 0.01.
         
     threshold_detect : float, optional
@@ -114,13 +114,13 @@ class rLDA(BaseEstimator):
     
     '''
     
-    def __init__(self, regression_coeff = 0.01, threshold_detect = 0.8, refractory_period = 0):
-        if (regression_coeff < 0) or (regression_coeff > 1):
-            raise Exception('ERROR: regression_coeff < 0 or > 1!')
+    def __init__(self, regularization_coeff = 0.01, threshold_detect = 0.8, refractory_period = 0):
+        if (regularization_coeff < 0) or (regularization_coeff > 1):
+            raise Exception('ERROR: regularization_coeff < 0 or > 1!')
         if (threshold_detect < 0) or (threshold_detect > 1):
             raise Exception('ERROR: threshold_detect < 0 or > 1!')
             
-        self.regression_coeff = regression_coeff
+        self.regularization_coeff = regularization_coeff
         self.threshold_detect = threshold_detect
         self.refractory_period = refractory_period
 
@@ -186,7 +186,7 @@ class rLDA(BaseEstimator):
         # Get mean for each class and classes covariance matrix
         self.class_cov_, self.mean_ = _mean_cov(X,y)
         # Compute overall cov matrix
-        self.cov_ = (1 - self.regression_coeff) * self.class_cov_ + (self.regression_coeff / n_feature) * np.trace(self.class_cov_) * np.eye(self.class_cov_.shape[0])
+        self.cov_ = (1 - self.regularization_coeff) * self.class_cov_ + (self.regularization_coeff / n_feature) * np.trace(self.class_cov_) * np.eye(self.class_cov_.shape[0])
         # Compute cov inverse
         self.inv_cov_ = np.linalg.inv(self.cov_)
         try:

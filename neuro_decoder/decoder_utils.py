@@ -111,7 +111,8 @@ def grid_search_cv_band(estimator, data, events, events_shifted, cv_blocks, win_
                 
                 for iDt, dt in enumerate(data_decode):
                         data_decode[iDt] = (dt - np.tile(data_mean,(dt.shape[0],1)))/np.tile(data_std,(dt.shape[0],1))
-                    
+            # plt.figure(); plt.plot(data_band[0])
+            # plt.figure(); plt.plot(data_decode[0])        
             
             # For parameters build decoders
             keys = list(set(params_clf.keys()))
@@ -122,14 +123,14 @@ def grid_search_cv_band(estimator, data, events, events_shifted, cv_blocks, win_
             # a loop to build all the possible parameters combinations and then loop 
             # through the params_clf
             n_features_count = 0
-            for regr_coeff in params_clf['regression_coeff']:
+            for regr_coeff in params_clf['regularization_coeff']:
                 for th in params_clf['threshold_detect']:
                     for refr_per in params_clf['refractory_period']:
                         n_features_count +=1
                         print('Building decoder {}/{}'.format(n_features_count,n_features))
                         
                         # Model                
-                        param_clf = {'regression_coeff': regr_coeff, 'threshold_detect': th, 'refractory_period': refr_per}
+                        param_clf = {'regularization_coeff': regr_coeff, 'threshold_detect': th, 'refractory_period': refr_per}
                         models_tmp = build_decoder(estimator, data_decode, events, events_shifted, cv_blocks, param_clf, params_data, win_tol)
                         
                         for model in models_tmp:
@@ -205,7 +206,7 @@ def grid_search_cv(estimator, data, events, events_shifted, cv_blocks, win_tol, 
     # through the params_clf
     models = []
     n_features_count = 0
-    for regr_coeff in params_clf['regression_coeff']:
+    for regr_coeff in params_clf['regularization_coeff']:
         for th in params_clf['threshold_detect']:
             for refr_per in params_clf['refractory_period']:
                 n_features_count +=1
@@ -222,7 +223,7 @@ def grid_search_cv(estimator, data, events, events_shifted, cv_blocks, win_tol, 
                         data_decode[iDt] = (dt - np.tile(data_mean,(dt.shape[0],1)))/np.tile(data_std,(dt.shape[0],1))
                                 
                 # Model                
-                param_clf = {'regression_coeff': regr_coeff, 'threshold_detect': th, 'refractory_period': refr_per}
+                param_clf = {'regularization_coeff': regr_coeff, 'threshold_detect': th, 'refractory_period': refr_per}
                 models.append(build_decoder(estimator, data_decode, events, events_shifted, cv_blocks, param_clf, params_data, win_tol))
                 
     models = flatten_list(models,  unique = False)
@@ -293,7 +294,7 @@ def build_decoder(estimator, data, events, events_shifted, cv_blocks, params_clf
         
     # Build the decoder
     if estimator == 'rLDA':
-        clf = rLDA(regression_coeff = params_clf['regression_coeff'], 
+        clf = rLDA(regularization_coeff = params_clf['regularization_coeff'], 
                    threshold_detect = params_clf['threshold_detect'],
                    refractory_period = params_clf['refractory_period'])
     else:
@@ -461,7 +462,7 @@ def build_decoder_freq_band(estimator, data, events, events_shifted, cv_blocks, 
     
     # Build the decoder
     if estimator == 'rLDA':
-        clf = rLDA(regression_coeff = params_clf['regression_coeff'], 
+        clf = rLDA(regularization_coeff = params_clf['regularization_coeff'], 
                    threshold_detect = params_clf['threshold_detect'],
                    refractory_period = params_clf['refractory_period'])
     else:
@@ -1295,7 +1296,7 @@ def check_decoder_params(estimator, params, convert = True):
     '''
     # Necessary parameters in params
     if estimator == 'rLDA':
-        params_fields = ['regression_coeff','threshold_detect','refractory_period']
+        params_fields = ['regularization_coeff','threshold_detect','refractory_period']
     
     if type(params) is not dict:
         raise Exception('ERROR: params must be a dict! You inputed a "{}".'.format(type(params)))

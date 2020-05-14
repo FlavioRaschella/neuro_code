@@ -1667,7 +1667,7 @@ def cleaning_pipeline(td, **kwargs):
             (is_field(add_segmentation_dict, 'plot') and add_segmentation_dict['plot'] == True):
                 for td_artefacts_tmp, td_segment_tmp in zip(td_artefacts,td_segment):
                     plt.figure(); plt.plot(td_artefacts_tmp['epochs'],'--b'); plt.plot(td_segment_tmp['epochs'],'--r');
-                    plt.title('Artefacts: blue; Turning: Red.')
+                    plt.title('Artefacts: blue; Epochs: Red.')
         td = segment_data(td, td_epochs, remove_artefacts_dict['fs'], invert_epoch = True)
     elif remove_artefacts_dict == None and add_segmentation_dict != None:
         if (is_field(add_segmentation_dict, 'plot') and add_segmentation_dict['plot'] == True):
